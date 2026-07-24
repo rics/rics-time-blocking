@@ -1,5 +1,7 @@
 # Bloco
 
+[English version](README.en.md)
+
 **Bloco** é um calendário de *time blocking* para transformar tarefas em tempo reservado na agenda. Você cria uma lista de tarefas e arrasta cada uma para o calendário, definindo quando pretende realizá-la.
 
 Os dados ficam no seu próprio navegador. Não é necessário criar conta para usar o app, e tarefas, blocos e preferências continuam disponíveis entre sessões. Depois de carregado, o app também pode ser instalado e usado offline.
