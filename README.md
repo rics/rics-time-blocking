@@ -1,89 +1,66 @@
 # Bloco
 
-MVP local-first para planejar tarefas com time blocking. O calendário usa
-TOAST UI Calendar e os dados ficam no IndexedDB do próprio navegador via Dexie.
+**Bloco** é um calendário de *time blocking* para transformar tarefas em tempo reservado na agenda. Você cria uma lista de tarefas e arrasta cada uma para o calendário, definindo quando pretende realizá-la.
 
-## Rodar localmente
+Os dados ficam no seu próprio navegador. Não é necessário criar conta para usar o app, e tarefas, blocos e preferências continuam disponíveis entre sessões. Depois de carregado, o app também pode ser instalado e usado offline.
 
-```bash
+## O que você pode fazer
+
+- Criar uma lista simples de tarefas e reutilizar uma mesma tarefa quantas vezes quiser.
+- Arrastar tarefas para o calendário e ajustar a duração dos blocos.
+- Mover ou redimensionar blocos diretamente na agenda.
+- Alternar entre as visões mensal, semanal, diária, de 2 semanas e de 3 semanas.
+- Ocultar ou estreitar os fins de semana.
+- Pesquisar tarefas e recolher a barra lateral quando precisar de mais espaço.
+- Importar cards em aberto do Fizzy ou Trello, caso queira conectar essas ferramentas.
+- Exportar e importar backups em JSON para levar seus dados a outro navegador ou dispositivo.
+
+Ao excluir uma tarefa, os blocos futuros associados são removidos; os blocos que já começaram são preservados como histórico.
+
+## Como funciona
+
+1. Adicione uma tarefa na barra lateral.
+2. Arraste-a para o horário desejado no calendário. Um bloco de 30 minutos é criado.
+3. Arraste o bloco ou sua borda para reposicioná-lo e ajustar sua duração.
+4. A tarefa continua disponível na lista para você agendá-la novamente quando quiser.
+
+Use o menu de três pontos no canto superior direito para exportar um backup. Na importação, você pode escolher entre mesclar os dados com os existentes ou substituí-los.
+
+## Pré-requisitos
+
+- [Node.js](https://nodejs.org/) 18 ou mais recente (a versão LTS é recomendada).
+- npm, que já vem com o Node.js.
+- Git, apenas se você for clonar este repositório.
+
+## Instalação e execução rápida
+
+No Windows PowerShell, clone o repositório e entre na pasta do projeto:
+
+```powershell
+git clone https://github.com/rics/rics-time-blocking.git
+cd rics-time-blocking
+```
+
+Instale as dependências e inicie o servidor local:
+
+```powershell
 npm install
 npm run dev
 ```
 
-Para validar o pacote de produção:
+O terminal mostrará um endereço semelhante a `http://localhost:5173`. Abra-o no navegador para usar o Bloco.
 
-```bash
+Para criar a versão de produção e testá-la localmente:
+
+```powershell
 npm run build
 npm run preview
 ```
 
-## O que o MVP já cobre
+## Seus dados
 
-- Visões mensal, semanal, diária, 2 semanas e 3 semanas
-- Finais de semana estreitos ou ocultos
-- Lista de tarefas persistente, recolhível e responsiva
-- Uma mesma tarefa agendada várias vezes
-- Criação por seleção no calendário, botão ou arrastar para o calendário
-- Drag-and-drop e redimensionamento de eventos
-- Exclusão de tarefa com remoção apenas dos eventos futuros relacionados
-- Sincronização manual de cards em aberto do Fizzy e do Trello
-- Backup JSON com importação por mesclagem ou substituição
-- PWA instalável e cache do app para uso offline
+Tarefas, eventos e preferências são armazenados localmente no IndexedDB do navegador. Os backups são arquivos JSON portáteis. Credenciais usadas nas integrações com Fizzy e Trello ficam somente no navegador e não fazem parte do backup.
 
-## Dados locais
+---
 
-O IndexedDB não usa o pequeno limite típico do `localStorage`, mas sua cota
-continua dependendo do navegador, dispositivo e espaço disponível. O backup
-JSON é a forma recomendada de portabilidade.
-
-O arquivo exportado contém:
-
-```json
-{
-  "format": "bloco-backup",
-  "version": 2,
-  "exportedAt": "ISO-8601",
-  "tasks": [],
-  "events": [],
-  "settings": []
-}
-```
-
-Credenciais de integrações ficam somente no navegador e não são incluídas no
-backup.
-
-Na importação, **mesclar** faz upsert pelos IDs do backup. **Substituir** limpa
-as três stores antes de importar.
-
-## Estrutura
-
-```text
-.
-├── AGENTS.md
-├── public/
-│   ├── app-icon.svg
-│   ├── fizzy.png
-│   └── trello.svg
-├── src/
-│   ├── backup.js
-│   ├── calendar.js
-│   ├── db.js
-│   ├── fizzy.js
-│   ├── main.js
-│   ├── style.css
-│   └── trello.js
-├── index.html
-├── package.json
-├── postcss.config.js
-├── tailwind.config.js
-└── vite.config.js
-```
-
-## Próximos passos sugeridos
-
-1. Adicionar duração padrão por tarefa.
-2. Separar calendários/projetos com cores.
-3. Criar edição completa do bloco ao clicar no evento.
-4. Adicionar recorrência e pesquisa.
-5. Incluir testes automatizados com IndexedDB em memória.
-6. Adicionar sincronização opcional, mantendo o modo local como padrão.
+Este é um projeto pessoal de [Ricardo Silva](https://ricsilva.com).
