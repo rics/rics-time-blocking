@@ -1,8 +1,8 @@
-# Bloco
+# Rics Time-blocking
 
 [Versão em português](README.md)
 
-**Bloco** is a time-blocking calendar for turning tasks into reserved time on your schedule. Create a task list, then drag each task onto the calendar to decide when you intend to work on it.
+**Rics Time-blocking** is a time-blocking calendar for turning tasks into reserved time on your schedule. Create a task list, then drag each task onto the calendar to decide when you intend to work on it.
 
 Your data stays in your own browser. No account is required, and tasks, blocks, and preferences remain available between sessions. Once loaded, the app can also be installed and used offline.
 
@@ -50,7 +50,7 @@ npm install
 npm run dev
 ```
 
-The terminal will display an address similar to `http://localhost:5173`. Open it in your browser to use Bloco.
+The terminal will display an address similar to `http://localhost:5173`. Open it in your browser to use Rics Time-blocking.
 
 To create a production build and test it locally:
 

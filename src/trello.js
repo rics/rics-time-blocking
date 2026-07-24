@@ -64,7 +64,7 @@ export function trelloAuthorizationUrl(apiKey) {
   url.searchParams.set('expiration', 'never');
   url.searchParams.set('scope', 'read');
   url.searchParams.set('response_type', 'token');
-  url.searchParams.set('name', 'Bloco');
+  url.searchParams.set('name', 'Rics Time-blocking');
   url.searchParams.set('key', normalizedKey);
   return url.toString();
 }

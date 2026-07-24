@@ -279,7 +279,7 @@ app.innerHTML = `
       </div>
 
       <p class="dialog-copy">
-        O Bloco traz apenas cards em aberto. Ao sincronizar, novos cards entram,
+        O Rics Time-blocking traz apenas cards em aberto. Ao sincronizar, novos cards entram,
         títulos são atualizados e cards fechados ou removidos saem da lista.
         Blocos que já começaram permanecem no histórico.
       </p>
@@ -350,7 +350,7 @@ app.innerHTML = `
 
       <p class="dialog-copy">
         Escolha os quadros que deseja acompanhar e marque as listas que
-        representam trabalho concluído. O Bloco importa os demais cards abertos.
+        representam trabalho concluído. O Rics Time-blocking importa os demais cards abertos.
       </p>
 
       <div class="integration-privacy-note">
@@ -1580,7 +1580,7 @@ async function init() {
 
   registerSW({
     onOfflineReady() {
-      notify('O Bloco está pronto para uso offline.');
+      notify('O Rics Time-blocking está pronto para uso offline.');
     },
     onRegisterError() {
       notify('Não foi possível ativar o modo offline.', 'error');
@@ -1592,7 +1592,7 @@ init().catch((error) => {
   app.innerHTML = `
     <main class="fatal-error">
       <i class="ph ph-warning-circle" aria-hidden="true"></i>
-      <h1>Não foi possível abrir o Bloco</h1>
+      <h1>Não foi possível abrir o Rics Time-blocking</h1>
       <p></p>
       <button type="button" onclick="window.location.reload()">Tentar novamente</button>
     </main>

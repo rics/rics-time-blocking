@@ -69,7 +69,7 @@ export async function exportBackup() {
   const date = new Intl.DateTimeFormat('sv-SE').format(new Date());
 
   link.href = url;
-  link.download = `bloco-backup-${date}.json`;
+  link.download = `rics-time-blocking-backup-${date}.json`;
   document.body.append(link);
   link.click();
   link.remove();

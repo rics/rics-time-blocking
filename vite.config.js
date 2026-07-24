@@ -27,8 +27,8 @@ export default defineConfig({
       injectRegister: 'auto',
       includeAssets: ['app-icon.svg', 'fizzy.png', 'trello.svg'],
       manifest: {
-        name: 'Bloco - Time blocking local',
-        short_name: 'Bloco',
+        name: 'Rics Time-blocking',
+        short_name: 'Rics Time-blocking',
         description: 'Planeje tarefas em blocos de tempo, direto no seu navegador.',
         theme_color: '#f7f8f7',
         background_color: '#f7f8f7',

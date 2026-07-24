@@ -2,7 +2,7 @@
 
 ## Product
 
-Bloco is a local-first time-blocking calendar. The MVP must work without an
+Rics Time-blocking is a local-first time-blocking calendar. The MVP must work without an
 account, backend, analytics, or network connection after its first load.
 
 ## Non-negotiable behavior
@@ -73,4 +73,3 @@ the desktop and mobile layouts in a browser.
 Likely next increments are projects/calendars, task duration defaults, labels,
 recurrence, search, richer event editing, and optional sync. Extend the current
 stores or add versioned stores instead of replacing the local-first core.
-
