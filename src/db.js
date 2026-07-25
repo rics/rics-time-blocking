@@ -1,27 +1,141 @@
 import Dexie from 'dexie';
 
-export const db = new Dexie('blocoCalendar');
+const DATABASE_NAME = 'ricsTimeBlocking';
+const LEGACY_DATABASE_NAME = 'blocoCalendar';
+const DATABASE_NAME_MIGRATION_KEY = 'migration.databaseName.ricsTimeBlocking';
 
-db.version(1).stores({
-  tasks: '++id,&title,createdAt',
-  events: '++id,taskId,title,start,end,calendarId,createdAt',
-  settings: '&key'
-});
+function defineSchema(database) {
+  database.version(1).stores({
+    tasks: '++id,&title,createdAt',
+    events: '++id,taskId,title,start,end,calendarId,createdAt',
+    settings: '&key'
+  });
 
-db.version(2).stores({
-  tasks: '++id,title,createdAt,source,&externalKey',
-  events: '++id,taskId,title,start,end,calendarId,createdAt',
-  settings: '&key',
-  integrations: '&id'
-});
+  database.version(2).stores({
+    tasks: '++id,title,createdAt,source,&externalKey',
+    events: '++id,taskId,title,start,end,calendarId,createdAt',
+    settings: '&key',
+    integrations: '&id'
+  });
 
-db.version(3).stores({
-  tasks: '++id,title,createdAt,source,&externalKey,projectId',
-  events: '++id,taskId,title,start,end,calendarId,createdAt,projectId',
-  settings: '&key',
-  integrations: '&id',
-  projects: '++id,&name,createdAt'
-});
+  database.version(3).stores({
+    tasks: '++id,title,createdAt,source,&externalKey,projectId',
+    events: '++id,taskId,title,start,end,calendarId,createdAt,projectId',
+    settings: '&key',
+    integrations: '&id',
+    projects: '++id,&name,createdAt'
+  });
+
+  return database;
+}
+
+export const db = defineSchema(new Dexie(DATABASE_NAME));
+
+async function deleteLegacyDatabase() {
+  if (await Dexie.exists(LEGACY_DATABASE_NAME)) {
+    const deletion = Dexie.delete(LEGACY_DATABASE_NAME).catch(() => undefined);
+    await Promise.race([
+      deletion,
+      new Promise((resolve) => setTimeout(resolve, 750))
+    ]);
+  }
+}
+
+export async function prepareDatabase() {
+  await db.open();
+  const completedMigration = await db.settings.get(DATABASE_NAME_MIGRATION_KEY);
+
+  if (completedMigration) {
+    await deleteLegacyDatabase();
+    return { migrated: false };
+  }
+
+  if (!(await Dexie.exists(LEGACY_DATABASE_NAME))) {
+    await db.settings.put({
+      key: DATABASE_NAME_MIGRATION_KEY,
+      value: { completedAt: new Date().toISOString(), source: 'fresh' }
+    });
+    return { migrated: false };
+  }
+
+  const targetHasData = await Promise.all([
+    db.tasks.count(),
+    db.events.count(),
+    db.projects.count(),
+    db.integrations.count()
+  ]);
+  if (targetHasData.some(Boolean)) {
+    throw new Error(
+      'Não foi possível migrar o banco antigo porque o novo banco já contém dados.'
+    );
+  }
+
+  const legacyDb = defineSchema(new Dexie(LEGACY_DATABASE_NAME));
+  await legacyDb.open();
+
+  try {
+    const [tasks, events, settings, integrations, projects] = await Promise.all([
+      legacyDb.tasks.toArray(),
+      legacyDb.events.toArray(),
+      legacyDb.settings.toArray(),
+      legacyDb.integrations.toArray(),
+      legacyDb.projects.toArray()
+    ]);
+
+    await db.transaction(
+      'rw',
+      db.tasks,
+      db.events,
+      db.settings,
+      db.integrations,
+      db.projects,
+      async () => {
+        await db.tasks.bulkPut(tasks);
+        await db.events.bulkPut(events);
+        await db.settings.bulkPut(settings);
+        await db.integrations.bulkPut(integrations);
+        await db.projects.bulkPut(projects);
+        await db.settings.put({
+          key: DATABASE_NAME_MIGRATION_KEY,
+          value: {
+            completedAt: new Date().toISOString(),
+            source: LEGACY_DATABASE_NAME
+          }
+        });
+      }
+    );
+  } finally {
+    legacyDb.close();
+  }
+
+  await deleteLegacyDatabase();
+  return { migrated: true };
+}
+
+export async function resetDatabase() {
+  await db.transaction(
+    'rw',
+    db.tasks,
+    db.events,
+    db.settings,
+    db.integrations,
+    db.projects,
+    async () => {
+      await Promise.all([
+        db.tasks.clear(),
+        db.events.clear(),
+        db.settings.clear(),
+        db.integrations.clear(),
+        db.projects.clear()
+      ]);
+      await db.settings.put({
+        key: DATABASE_NAME_MIGRATION_KEY,
+        value: { completedAt: new Date().toISOString(), source: 'reset' }
+      });
+    }
+  );
+  await deleteLegacyDatabase();
+}
 
 function normalizeTitle(title) {
   return String(title ?? '').trim().replace(/\s+/g, ' ');
@@ -126,15 +240,6 @@ export async function addTaskWithEvent(title, event) {
 
     return { task, event: record };
   });
-}
-
-export async function countFutureEventsForTask(task) {
-  const now = Date.now();
-  return db.events
-    .filter((event) => {
-      return belongsToTask(event, task) && new Date(event.start).getTime() > now;
-    })
-    .count();
 }
 
 export async function deleteTaskAndFutureEvents(task) {

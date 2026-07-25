@@ -1,8 +1,9 @@
 import { db, getAllData } from './db.js';
 
-const BACKUP_FORMAT = 'bloco-backup';
-const BACKUP_VERSION = 3;
-const SUPPORTED_BACKUP_VERSIONS = new Set([1, 2, BACKUP_VERSION]);
+const BACKUP_FORMAT = 'rics-time-blocking-backup';
+const LEGACY_BACKUP_FORMAT = 'bloco-backup';
+const BACKUP_VERSION = 4;
+const SUPPORTED_BACKUP_VERSIONS = new Set([1, 2, 3, BACKUP_VERSION]);
 
 function isValidDate(value) {
   return typeof value === 'string' && Number.isFinite(new Date(value).getTime());
@@ -13,7 +14,10 @@ function validateBackup(data) {
     throw new Error('O arquivo não contém um backup válido.');
   }
 
-  if (data.format !== BACKUP_FORMAT || !SUPPORTED_BACKUP_VERSIONS.has(data.version)) {
+  if (
+    ![BACKUP_FORMAT, LEGACY_BACKUP_FORMAT].includes(data.format) ||
+    !SUPPORTED_BACKUP_VERSIONS.has(data.version)
+  ) {
     throw new Error('Formato ou versão de backup não suportado.');
   }
 
@@ -21,7 +25,7 @@ function validateBackup(data) {
     throw new Error('O backup está incompleto.');
   }
 
-  if (data.version === BACKUP_VERSION && !Array.isArray(data.projects)) {
+  if (data.version >= 3 && !Array.isArray(data.projects)) {
     throw new Error('O backup está incompleto.');
   }
 

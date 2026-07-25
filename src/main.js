@@ -9,7 +9,6 @@ import {
   addEvent,
   addProject,
   addTask,
-  countFutureEventsForTask,
   deleteEvent,
   deleteIntegration,
   deleteProject,
@@ -20,6 +19,8 @@ import {
   listEvents,
   listProjects,
   listTasks,
+  prepareDatabase,
+  resetDatabase,
   saveIntegration,
   setSetting,
   syncExternalTasks,
@@ -63,15 +64,22 @@ const app = document.querySelector('#app');
 app.innerHTML = `
   <div class="app-shell" data-sidebar="visible" data-screen="planning">
     <header class="global-nav">
-      <div class="brand" aria-label="Rics Time-blocking">
-        <span class="brand-mark" aria-hidden="true"><span></span></span>
-        <span>Rics Time-blocking</span>
+      <div class="global-nav-start">
+        <div class="brand" aria-label="Rics Time-blocking">
+          <span class="brand-mark" aria-hidden="true"><span></span></span>
+          <span>Rics Time-blocking</span>
+        </div>
       </div>
 
-      <nav class="app-navigation" aria-label="Navegação principal">
-        <button class="app-navigation-link is-active" id="planning-navigation" type="button" aria-current="page">Planejamento</button>
-        <button class="app-navigation-link" id="reports-navigation" type="button">Relatórios</button>
-      </nav>
+      <div class="global-nav-end">
+        <nav class="app-navigation" aria-label="Navegação principal">
+          <button class="app-navigation-link is-active" id="planning-navigation" type="button" aria-current="page">Planejamento</button>
+          <button class="app-navigation-link" id="reports-navigation" type="button">Relatórios</button>
+        </nav>
+        <button class="icon-button global-settings-button" id="settings-navigation" type="button" aria-label="Configurações" title="Configurações">
+          <i class="ph ph-gear-six" aria-hidden="true"></i>
+        </button>
+      </div>
     </header>
 
     <section class="planning-screen" aria-label="Planejamento">
@@ -112,21 +120,6 @@ app.innerHTML = `
           <span class="option-label">Ocultar fim de semana</span>
         </button>
 
-        <details class="more-menu">
-          <summary class="icon-button" aria-label="Backup e importação" title="Backup e importação">
-            <i class="ph ph-dots-three-outline" aria-hidden="true"></i>
-          </summary>
-          <div class="menu-popover">
-            <button id="export-button" type="button">
-              <i class="ph ph-download-simple" aria-hidden="true"></i>
-              Exportar backup
-            </button>
-            <button id="import-button" type="button">
-              <i class="ph ph-upload-simple" aria-hidden="true"></i>
-              Importar backup
-            </button>
-          </div>
-        </details>
       </div>
     </header>
 
@@ -180,33 +173,11 @@ app.innerHTML = `
         <div id="task-list" class="task-list" aria-live="polite"></div>
 
         <div class="task-integrations" aria-label="Integrações de tarefas">
-          <div class="integration-row">
-            <button class="integration-sync-button" id="fizzy-sync-button" type="button">
-              <img src="/fizzy.png" alt="" aria-hidden="true" />
-              <span class="integration-sync-copy">
-                <strong id="fizzy-sync-label">Conectar ao Fizzy</strong>
-                <span id="fizzy-sync-status">Importe seus cards em aberto</span>
-              </span>
-              <i class="ph ph-arrow-clockwise" aria-hidden="true"></i>
-            </button>
-            <button class="integration-settings-button" id="fizzy-settings-button" type="button" aria-label="Configurar Fizzy" title="Configurar Fizzy" hidden>
-              <i class="ph ph-gear-six" aria-hidden="true"></i>
-            </button>
-          </div>
-
-          <div class="integration-row">
-            <button class="integration-sync-button" id="trello-sync-button" type="button">
-              <img src="/trello.svg" alt="" aria-hidden="true" />
-              <span class="integration-sync-copy">
-                <strong id="trello-sync-label">Conectar ao Trello</strong>
-                <span id="trello-sync-status">Importe cards dos seus quadros</span>
-              </span>
-              <i class="ph ph-arrow-clockwise" aria-hidden="true"></i>
-            </button>
-            <button class="integration-settings-button" id="trello-settings-button" type="button" aria-label="Configurar Trello" title="Configurar Trello" hidden>
-              <i class="ph ph-gear-six" aria-hidden="true"></i>
-            </button>
-          </div>
+          <button class="integration-sync-button sync-all-button" id="sync-all-button" type="button" disabled>
+            <span class="sync-all-icons" id="sync-all-icons" aria-hidden="true"></span>
+            <strong>Sync</strong>
+            <i class="ph ph-arrow-clockwise" aria-hidden="true"></i>
+          </button>
         </div>
         </section>
 
@@ -303,6 +274,91 @@ app.innerHTML = `
         </section>
       </div>
     </section>
+
+    <section class="settings-screen" id="settings-screen" aria-labelledby="settings-heading" hidden>
+      <header class="settings-screen-heading">
+        <div>
+          <p class="dialog-kicker">Dados e conexões</p>
+          <h1 id="settings-heading">Configurações</h1>
+          <p>Gerencie seus dados locais, backups e aplicativos conectados.</p>
+        </div>
+      </header>
+
+      <div class="settings-layout">
+        <section class="settings-section">
+          <div class="settings-section-heading">
+            <span class="settings-section-icon" aria-hidden="true">
+              <i class="ph ph-hard-drives"></i>
+            </span>
+            <div>
+              <h2>Backup do sistema</h2>
+              <p>Exporte uma cópia portátil ou importe um backup anterior.</p>
+            </div>
+          </div>
+          <div class="settings-actions">
+            <button class="secondary-button" id="export-button" type="button">
+              <i class="ph ph-download-simple" aria-hidden="true"></i>
+              Exportar backup
+            </button>
+            <button class="secondary-button" id="import-button" type="button">
+              <i class="ph ph-upload-simple" aria-hidden="true"></i>
+              Importar backup
+            </button>
+          </div>
+        </section>
+
+        <section class="settings-section settings-integrations-section">
+          <div class="settings-section-heading">
+            <span class="settings-section-icon" aria-hidden="true">
+              <i class="ph ph-arrows-clockwise"></i>
+            </span>
+            <div>
+              <h2>Aplicativos conectados</h2>
+              <p>Adicione ou ajuste as fontes usadas pelo botão Sync.</p>
+            </div>
+          </div>
+          <div class="settings-integration-list">
+            <article class="settings-integration-item">
+              <img src="/fizzy.png" alt="" aria-hidden="true" />
+              <div>
+                <h3>Fizzy</h3>
+                <p id="settings-fizzy-status">Não conectado</p>
+              </div>
+              <button class="secondary-button" id="fizzy-settings-button" type="button">
+                Conectar
+              </button>
+            </article>
+            <article class="settings-integration-item">
+              <img src="/trello.svg" alt="" aria-hidden="true" />
+              <div>
+                <h3>Trello</h3>
+                <p id="settings-trello-status">Não conectado</p>
+              </div>
+              <button class="secondary-button" id="trello-settings-button" type="button">
+                Conectar
+              </button>
+            </article>
+          </div>
+        </section>
+
+        <section class="settings-section settings-danger-section">
+          <div class="settings-section-heading">
+            <span class="settings-section-icon" aria-hidden="true">
+              <i class="ph ph-warning-circle"></i>
+            </span>
+            <div>
+              <h2>Redefinir banco de dados</h2>
+              <p>Apaga tarefas, blocos, projetos, preferências e conexões deste navegador.</p>
+            </div>
+          </div>
+          <div class="settings-actions">
+            <button class="danger-button" id="reset-database-button" type="button">
+              Apagar todos os dados
+            </button>
+          </div>
+        </section>
+      </div>
+    </section>
   </div>
 
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
@@ -395,29 +451,38 @@ app.innerHTML = `
         <select id="task-project-dialog-select"></select>
       </label>
       <p id="task-project-form-status" class="task-form-status" role="status" aria-live="polite"></p>
-      <div class="dialog-actions">
+      <div class="dialog-actions task-project-dialog-actions">
+        <button class="danger-button" id="remove-task-or-event" type="button">
+          <i class="ph ph-trash" aria-hidden="true"></i>
+          <span>Remover tarefa</span>
+        </button>
+        <span class="dialog-action-spacer"></span>
         <button class="secondary-button" type="button" data-close-dialog>Cancelar</button>
         <button class="primary-button" id="save-task-project" type="submit">Salvar</button>
       </div>
     </form>
   </dialog>
 
-  <dialog id="delete-dialog" class="app-dialog compact-dialog">
+  <dialog id="reset-database-dialog" class="app-dialog compact-dialog">
     <div class="dialog-heading">
       <div>
-        <p class="dialog-kicker">Excluir tarefa</p>
-        <h2 id="delete-title">Confirmar exclusão</h2>
+        <p class="dialog-kicker">Zona de perigo</p>
+        <h2>Apagar todos os dados?</h2>
       </div>
     </div>
-    <p id="delete-description" class="dialog-copy"></p>
-    <p id="delete-source-note" class="source-delete-note" hidden></p>
-    <p class="history-note">
-      <i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i>
-      Blocos que já começaram serão mantidos como histórico.
-    </p>
+    <div class="reset-warning">
+      <i class="ph ph-warning-circle" aria-hidden="true"></i>
+      <p>
+        Esta ação é irreversível. Tarefas, blocos, projetos, preferências e conexões
+        serão removidos deste navegador.
+      </p>
+    </div>
+    <p class="dialog-copy">Exporte um backup antes de continuar se quiser recuperar os dados depois.</p>
     <div class="dialog-actions">
       <button class="secondary-button" type="button" data-close-dialog>Cancelar</button>
-      <button class="danger-button" id="confirm-delete" type="button">Excluir tarefa</button>
+      <button class="danger-button" id="confirm-reset-database" type="button">
+        Sim, apagar tudo
+      </button>
     </div>
   </dialog>
 
@@ -614,7 +679,9 @@ const elements = {
   shell: document.querySelector('.app-shell'),
   planningNavigation: document.querySelector('#planning-navigation'),
   reportsNavigation: document.querySelector('#reports-navigation'),
+  settingsNavigation: document.querySelector('#settings-navigation'),
   reportsScreen: document.querySelector('#reports-screen'),
+  settingsScreen: document.querySelector('#settings-screen'),
   reportForm: document.querySelector('#report-form'),
   reportStartDate: document.querySelector('#report-start-date'),
   reportEndDate: document.querySelector('#report-end-date'),
@@ -656,12 +723,12 @@ const elements = {
   taskProjectDialogTitle: document.querySelector('#task-project-dialog-title'),
   taskProjectSelect: document.querySelector('#task-project-dialog-select'),
   taskProjectFormStatus: document.querySelector('#task-project-form-status'),
+  removeTaskOrEvent: document.querySelector('#remove-task-or-event'),
   taskList: document.querySelector('#task-list'),
   taskCount: document.querySelector('#task-count'),
-  deleteDialog: document.querySelector('#delete-dialog'),
-  deleteTitle: document.querySelector('#delete-title'),
-  deleteDescription: document.querySelector('#delete-description'),
-  deleteSourceNote: document.querySelector('#delete-source-note'),
+  resetDatabaseDialog: document.querySelector('#reset-database-dialog'),
+  resetDatabaseButton: document.querySelector('#reset-database-button'),
+  confirmResetDatabase: document.querySelector('#confirm-reset-database'),
   importDialog: document.querySelector('#import-dialog'),
   importFile: document.querySelector('#import-file'),
   importFileName: document.querySelector('#import-file-name'),
@@ -674,9 +741,7 @@ const elements = {
   fizzySaveButton: document.querySelector('#fizzy-save-button'),
   fizzyDisconnectButton: document.querySelector('#fizzy-disconnect-button'),
   fizzyFormStatus: document.querySelector('#fizzy-form-status'),
-  fizzySyncButton: document.querySelector('#fizzy-sync-button'),
-  fizzySyncLabel: document.querySelector('#fizzy-sync-label'),
-  fizzySyncStatus: document.querySelector('#fizzy-sync-status'),
+  settingsFizzyStatus: document.querySelector('#settings-fizzy-status'),
   fizzySettingsButton: document.querySelector('#fizzy-settings-button'),
   trelloDialog: document.querySelector('#trello-dialog'),
   trelloForm: document.querySelector('#trello-form'),
@@ -690,10 +755,10 @@ const elements = {
   trelloSelection: document.querySelector('#trello-selection'),
   trelloBoardList: document.querySelector('#trello-board-list'),
   trelloBoardCount: document.querySelector('#trello-board-count'),
-  trelloSyncButton: document.querySelector('#trello-sync-button'),
-  trelloSyncLabel: document.querySelector('#trello-sync-label'),
-  trelloSyncStatus: document.querySelector('#trello-sync-status'),
+  settingsTrelloStatus: document.querySelector('#settings-trello-status'),
   trelloSettingsButton: document.querySelector('#trello-settings-button'),
+  syncAllButton: document.querySelector('#sync-all-button'),
+  syncAllIcons: document.querySelector('#sync-all-icons'),
   toastRegion: document.querySelector('#toast-region'),
   narrowWeekends: document.querySelector('#narrow-weekends'),
   hideWeekends: document.querySelector('#hide-weekends')
@@ -707,14 +772,15 @@ const state = {
   selectedTaskId: null,
   editingProjectId: null,
   editingTaskId: null,
+  editingEventId: null,
   report: {
     rows: [],
     mode: 'grouped',
     generated: false
   },
-  pendingDeleteTask: null,
   pendingImportFile: null,
   calendar: null,
+  syncingAll: false,
   fizzy: {
     connection: null,
     accounts: [],
@@ -845,14 +911,24 @@ function populateTaskProjectSelect(task) {
   }
 }
 
-function openTaskProjectDialog(task) {
+function openTaskProjectDialog(task, { eventId = null, eventTitle = '' } = {}) {
   state.editingTaskId = task?.id ?? null;
-  elements.taskProjectDialogTitle.textContent = task?.title || 'Tarefa';
+  state.editingEventId = eventId;
+  const isCalendarEvent = eventId != null;
+  elements.taskProjectDialogTitle.textContent = task?.title || eventTitle || 'Tarefa';
   elements.taskProjectSelect.disabled = !task;
   document.querySelector('#save-task-project').disabled = !task;
+  elements.removeTaskOrEvent.disabled = !task && !isCalendarEvent;
+  elements.removeTaskOrEvent.querySelector('span').textContent = isCalendarEvent
+    ? 'Remover este bloco'
+    : 'Remover tarefa';
   populateTaskProjectSelect(task);
   setTaskProjectFormStatus(
-    task ? '' : 'A tarefa original não está mais disponível para edição.',
+    task
+      ? ''
+      : isCalendarEvent
+        ? 'A tarefa original não está mais disponível, mas este bloco ainda pode ser removido.'
+        : 'A tarefa original não está mais disponível para edição.',
     task ? '' : 'error'
   );
   elements.taskProjectDialog.showModal();
@@ -949,26 +1025,59 @@ function populateFizzyAccounts(accounts, selectedSlug) {
   elements.fizzyAccountField.hidden = accounts.length === 0;
 }
 
+function renderIntegrationConnections() {
+  const connections = [
+    {
+      id: 'fizzy',
+      icon: TASK_SOURCES.fizzy.icon,
+      connection: state.fizzy.connection,
+      syncing: state.fizzy.syncing,
+      status: elements.settingsFizzyStatus,
+      button: elements.fizzySettingsButton,
+      connectionLabel: state.fizzy.connection?.accountName
+    },
+    {
+      id: 'trello',
+      icon: TASK_SOURCES.trello.icon,
+      connection: state.trello.connection,
+      syncing: state.trello.syncing,
+      status: elements.settingsTrelloStatus,
+      button: elements.trelloSettingsButton,
+      connectionLabel: state.trello.connection?.memberName
+    }
+  ];
+  const connected = connections.filter((item) => item.connection);
+  const syncing = state.syncingAll || connections.some((item) => item.syncing);
+
+  for (const item of connections) {
+    item.button.disabled = item.syncing;
+    item.button.textContent = item.connection ? 'Configurar' : 'Conectar';
+    item.status.textContent = item.syncing
+      ? 'Sincronizando…'
+      : item.connection
+        ? `${item.connectionLabel} · ${formatLastSync(item.connection.lastSyncedAt)}`
+        : 'Não conectado';
+  }
+
+  elements.syncAllIcons.replaceChildren();
+  for (const item of connected) {
+    const icon = document.createElement('img');
+    icon.src = item.icon;
+    icon.alt = '';
+    icon.setAttribute('aria-hidden', 'true');
+    elements.syncAllIcons.append(icon);
+  }
+
+  elements.syncAllButton.disabled = connected.length === 0 || syncing;
+  elements.syncAllButton.classList.toggle('is-syncing', syncing);
+  elements.syncAllButton.setAttribute('aria-busy', String(syncing));
+  elements.syncAllButton.title = connected.length
+    ? 'Sincronizar aplicativos conectados'
+    : 'Conecte um aplicativo nas Configurações';
+}
+
 function renderFizzyConnection() {
-  const { connection, syncing } = state.fizzy;
-  elements.fizzySyncButton.disabled = syncing;
-  elements.fizzySyncButton.classList.toggle('is-syncing', syncing);
-  elements.fizzySettingsButton.hidden = !connection;
-
-  if (syncing) {
-    elements.fizzySyncLabel.textContent = 'Sincronizando Fizzy';
-    elements.fizzySyncStatus.textContent = 'Buscando cards em aberto';
-    return;
-  }
-
-  if (!connection) {
-    elements.fizzySyncLabel.textContent = 'Conectar ao Fizzy';
-    elements.fizzySyncStatus.textContent = 'Importe seus cards em aberto';
-    return;
-  }
-
-  elements.fizzySyncLabel.textContent = 'Sincronizar Fizzy';
-  elements.fizzySyncStatus.textContent = formatLastSync(connection.lastSyncedAt);
+  renderIntegrationConnections();
 }
 
 async function openFizzyDialog() {
@@ -1047,12 +1156,12 @@ function syncSummary(result) {
   return parts.length ? parts.join(', ') : 'Nenhuma mudança';
 }
 
-async function syncFizzy() {
+async function syncFizzy({ announce = true, refresh = true } = {}) {
   const connection = state.fizzy.connection || (await getIntegration('fizzy'));
 
   if (!connection) {
     await openFizzyDialog();
-    return;
+    return { source: 'fizzy', skipped: true };
   }
 
   state.fizzy.connection = connection;
@@ -1066,10 +1175,12 @@ async function syncFizzy() {
       ...connection,
       lastSyncedAt: new Date().toISOString()
     });
-    await refreshData();
-    notify(`Fizzy sincronizado. ${syncSummary(result)}.`);
+    if (refresh) await refreshData();
+    if (announce) notify(`Fizzy sincronizado. ${syncSummary(result)}.`);
+    return { source: 'fizzy', result };
   } catch (error) {
-    notify(error.message, 'error');
+    if (announce) notify(error.message, 'error');
+    return { source: 'fizzy', error };
   } finally {
     state.fizzy.syncing = false;
     renderFizzyConnection();
@@ -1222,25 +1333,7 @@ function selectedTrelloConfiguration() {
 }
 
 function renderTrelloConnection() {
-  const { connection, syncing } = state.trello;
-  elements.trelloSyncButton.disabled = syncing;
-  elements.trelloSyncButton.classList.toggle('is-syncing', syncing);
-  elements.trelloSettingsButton.hidden = !connection;
-
-  if (syncing) {
-    elements.trelloSyncLabel.textContent = 'Sincronizando Trello';
-    elements.trelloSyncStatus.textContent = 'Buscando cards em aberto';
-    return;
-  }
-
-  if (!connection) {
-    elements.trelloSyncLabel.textContent = 'Conectar ao Trello';
-    elements.trelloSyncStatus.textContent = 'Importe cards dos seus quadros';
-    return;
-  }
-
-  elements.trelloSyncLabel.textContent = 'Sincronizar Trello';
-  elements.trelloSyncStatus.textContent = formatLastSync(connection.lastSyncedAt);
+  renderIntegrationConnections();
 }
 
 async function openTrelloDialog() {
@@ -1320,12 +1413,12 @@ function openTrelloAuthorization() {
   }
 }
 
-async function syncTrello() {
+async function syncTrello({ announce = true, refresh = true } = {}) {
   const connection = state.trello.connection || (await getIntegration('trello'));
 
   if (!connection) {
     await openTrelloDialog();
-    return;
+    return { source: 'trello', skipped: true };
   }
 
   state.trello.connection = connection;
@@ -1339,13 +1432,62 @@ async function syncTrello() {
       ...connection,
       lastSyncedAt: new Date().toISOString()
     });
-    await refreshData();
-    notify(`Trello sincronizado. ${syncSummary(result)}.`);
+    if (refresh) await refreshData();
+    if (announce) notify(`Trello sincronizado. ${syncSummary(result)}.`);
+    return { source: 'trello', result };
   } catch (error) {
-    notify(error.message, 'error');
+    if (announce) notify(error.message, 'error');
+    return { source: 'trello', error };
   } finally {
     state.trello.syncing = false;
     renderTrelloConnection();
+  }
+}
+
+async function syncAllConnections() {
+  const connectedSources = [
+    state.fizzy.connection ? 'fizzy' : null,
+    state.trello.connection ? 'trello' : null
+  ].filter(Boolean);
+  if (!connectedSources.length || state.syncingAll) return;
+
+  state.syncingAll = true;
+  renderIntegrationConnections();
+
+  try {
+    const outcomes = [];
+    if (state.fizzy.connection) {
+      outcomes.push(await syncFizzy({ announce: false, refresh: false }));
+    }
+    if (state.trello.connection) {
+      outcomes.push(await syncTrello({ announce: false, refresh: false }));
+    }
+
+    if (outcomes.some((outcome) => outcome.result)) {
+      await refreshData();
+    }
+
+    const failures = outcomes.filter((outcome) => outcome.error);
+    if (failures.length) {
+      const labels = failures.map((outcome) => TASK_SOURCES[outcome.source].label);
+      notify(`Não foi possível sincronizar: ${labels.join(' e ')}.`, 'error');
+      return;
+    }
+
+    const totals = outcomes.reduce(
+      (summary, outcome) => ({
+        added: summary.added + (outcome.result?.added || 0),
+        updated: summary.updated + (outcome.result?.updated || 0),
+        removed: summary.removed + (outcome.result?.removed || 0)
+      }),
+      { added: 0, updated: 0, removed: 0 }
+    );
+    notify(`Sync concluído. ${syncSummary(totals)}.`);
+  } catch (error) {
+    notify(error.message || 'Não foi possível concluir a sincronização.', 'error');
+  } finally {
+    state.syncingAll = false;
+    renderIntegrationConnections();
   }
 }
 
@@ -1412,11 +1554,21 @@ function renderTasks() {
     `;
     row.querySelector('.task-title').textContent = task.title;
     row.querySelector('.task-content').addEventListener('click', () => openTaskProjectDialog(task));
-    row.querySelector('.task-delete').addEventListener('click', () => openDeleteDialog(task));
+    row.querySelector('.task-delete').addEventListener('click', async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        await removeTaskFromList(task);
+        notify('Tarefa removida. O histórico foi preservado.');
+      } catch (error) {
+        button.disabled = false;
+        notify(error.message, 'error');
+      }
+    });
     row.addEventListener('dragstart', (event) => {
       state.selectedTaskId = task.id;
       event.dataTransfer.effectAllowed = 'copy';
-      event.dataTransfer.setData('application/x-bloco-task', String(task.id));
+      event.dataTransfer.setData('application/x-rics-time-blocking-task', String(task.id));
       event.dataTransfer.setData('text/plain', task.title);
       row.classList.add('is-dragging');
     });
@@ -1488,22 +1640,16 @@ async function createTaskBlock(taskId, { start, end }) {
   return record;
 }
 
-async function openDeleteDialog(task) {
-  const futureCount = await countFutureEventsForTask(task);
-  const source = TASK_SOURCES[task.source];
-  state.pendingDeleteTask = task;
-  elements.deleteTitle.textContent = task.title;
-  elements.deleteDescription.textContent =
-    futureCount === 0
-      ? 'A tarefa será removida da lista. Não há blocos futuros relacionados.'
-      : futureCount === 1
-        ? 'A tarefa e 1 bloco futuro relacionado serão removidos.'
-        : `A tarefa e ${futureCount} blocos futuros relacionados serão removidos.`;
-  elements.deleteSourceNote.hidden = !source;
-  elements.deleteSourceNote.textContent = source
-    ? `Se o card continuar em aberto e dentro do escopo do ${source.label}, ele voltará na próxima sincronização.`
-    : '';
-  elements.deleteDialog.showModal();
+async function removeTaskFromList(task) {
+  const deletedEvents = await deleteTaskAndFutureEvents(task);
+  for (const event of deletedEvents) state.calendar.removeEvent(event);
+  state.tasks = state.tasks.filter((item) => Number(item.id) !== Number(task.id));
+  renderTasks();
+}
+
+async function removeEventFromCalendar(eventId) {
+  await deleteEvent(eventId);
+  state.calendar.removeEvent({ id: eventId });
 }
 
 function closeDialog(dialog) {
@@ -1752,17 +1898,25 @@ function resetReportScreen() {
 }
 
 function setActiveScreen(screen) {
+  const planning = screen === 'planning';
   const reports = screen === 'reports';
+  const settings = screen === 'settings';
   elements.shell.dataset.screen = screen;
   elements.reportsScreen.hidden = !reports;
-  elements.planningNavigation.classList.toggle('is-active', !reports);
-  elements.planningNavigation.toggleAttribute('aria-current', !reports);
+  elements.settingsScreen.hidden = !settings;
+  elements.planningNavigation.classList.toggle('is-active', planning);
+  elements.planningNavigation.toggleAttribute('aria-current', planning);
   elements.reportsNavigation.classList.toggle('is-active', reports);
   elements.reportsNavigation.toggleAttribute('aria-current', reports);
+  elements.settingsNavigation.classList.toggle('is-active', settings);
+  elements.settingsNavigation.toggleAttribute('aria-current', settings);
 
   if (reports) {
     elements.reportsScreen.scrollTop = 0;
     resetReportScreen();
+  } else if (settings) {
+    elements.settingsScreen.scrollTop = 0;
+    renderIntegrationConnections();
   } else {
     clearReportOutput();
     window.requestAnimationFrame(() => state.calendar?.render());
@@ -1838,6 +1992,7 @@ async function exportCurrentReportPdf() {
 function wireEvents() {
   elements.planningNavigation.addEventListener('click', () => setActiveScreen('planning'));
   elements.reportsNavigation.addEventListener('click', () => setActiveScreen('reports'));
+  elements.settingsNavigation.addEventListener('click', () => setActiveScreen('settings'));
 
   [elements.reportStartDate, elements.reportEndDate].forEach((input) => {
     input.addEventListener('change', () => {
@@ -1884,7 +2039,6 @@ function wireEvents() {
     setWeekendPreference('hideWeekends', !state.preferences.hideWeekends)
   );
 
-  elements.fizzySyncButton.addEventListener('click', () => syncFizzy());
   elements.fizzySettingsButton.addEventListener('click', () => openFizzyDialog());
   elements.fizzyVerifyButton.addEventListener('click', () => verifyFizzyToken());
 
@@ -1942,7 +2096,6 @@ function wireEvents() {
     notify('Fizzy desconectado. As tarefas já importadas foram mantidas.');
   });
 
-  elements.trelloSyncButton.addEventListener('click', () => syncTrello());
   elements.trelloSettingsButton.addEventListener('click', () => openTrelloDialog());
   elements.trelloAuthorizeButton.addEventListener('click', openTrelloAuthorization);
   elements.trelloVerifyButton.addEventListener('click', () => verifyTrelloAccess());
@@ -2013,6 +2166,8 @@ function wireEvents() {
     notify('Trello desconectado. As tarefas já importadas foram mantidas.');
   });
 
+  elements.syncAllButton.addEventListener('click', () => syncAllConnections());
+
   document.querySelector('#sidebar-toggle').addEventListener('click', () => setSidebarHidden(true));
   document.querySelector('#sidebar-restore').addEventListener('click', () => setSidebarHidden(false));
   document.querySelector('#sidebar-scrim').addEventListener('click', () => setSidebarHidden(true));
@@ -2066,6 +2221,37 @@ function wireEvents() {
     }
   });
 
+  elements.removeTaskOrEvent.addEventListener('click', async () => {
+    const task = state.tasks.find(
+      (item) => Number(item.id) === Number(state.editingTaskId)
+    );
+    const eventId = state.editingEventId;
+
+    if (!task && eventId == null) {
+      setTaskProjectFormStatus(
+        'A tarefa original não está mais disponível para remoção.',
+        'error'
+      );
+      return;
+    }
+
+    elements.removeTaskOrEvent.disabled = true;
+    try {
+      if (eventId != null) {
+        await removeEventFromCalendar(eventId);
+        closeDialog(elements.taskProjectDialog);
+        notify('Bloco removido.');
+      } else {
+        await removeTaskFromList(task);
+        closeDialog(elements.taskProjectDialog);
+        notify('Tarefa removida. O histórico foi preservado.');
+      }
+    } catch (error) {
+      elements.removeTaskOrEvent.disabled = false;
+      setTaskProjectFormStatus(error.message, 'error');
+    }
+  });
+
   elements.addTaskForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const saveMode = event.submitter?.dataset.saveMode || 'continue';
@@ -2091,23 +2277,6 @@ function wireEvents() {
     }
   });
 
-  document.querySelector('#confirm-delete').addEventListener('click', async () => {
-    if (!state.pendingDeleteTask) return;
-    try {
-      const deletedEvents = await deleteTaskAndFutureEvents(state.pendingDeleteTask);
-      for (const event of deletedEvents) state.calendar.removeEvent(event);
-      state.tasks = state.tasks.filter(
-        (task) => Number(task.id) !== Number(state.pendingDeleteTask.id)
-      );
-      state.pendingDeleteTask = null;
-      renderTasks();
-      closeDialog(elements.deleteDialog);
-      notify('Tarefa removida. O histórico foi preservado.');
-    } catch (error) {
-      notify(error.message, 'error');
-    }
-  });
-
   document.querySelectorAll('[data-close-dialog]').forEach((button) => {
     button.addEventListener('click', () => closeDialog(button.closest('dialog')));
   });
@@ -2121,7 +2290,6 @@ function wireEvents() {
   document.querySelector('#export-button').addEventListener('click', async () => {
     try {
       await exportBackup();
-      document.querySelector('.more-menu').open = false;
       notify('Backup exportado.');
     } catch (error) {
       notify(error.message, 'error');
@@ -2129,8 +2297,24 @@ function wireEvents() {
   });
 
   document.querySelector('#import-button').addEventListener('click', () => {
-    document.querySelector('.more-menu').open = false;
     elements.importFile.click();
+  });
+
+  elements.resetDatabaseButton.addEventListener('click', () => {
+    elements.resetDatabaseDialog.showModal();
+  });
+
+  elements.confirmResetDatabase.addEventListener('click', async () => {
+    elements.confirmResetDatabase.disabled = true;
+    elements.confirmResetDatabase.textContent = 'Apagando…';
+    try {
+      await resetDatabase();
+      window.location.reload();
+    } catch (error) {
+      elements.confirmResetDatabase.disabled = false;
+      elements.confirmResetDatabase.textContent = 'Sim, apagar tudo';
+      notify(error.message || 'Não foi possível apagar os dados.', 'error');
+    }
   });
 
   elements.importFile.addEventListener('change', () => {
@@ -2162,7 +2346,7 @@ function wireEvents() {
   });
 
   elements.calendarPane.addEventListener('dragover', (event) => {
-    if (!event.dataTransfer.types.includes('application/x-bloco-task')) return;
+    if (!event.dataTransfer.types.includes('application/x-rics-time-blocking-task')) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = 'copy';
     updateDropPreview(event);
@@ -2175,7 +2359,9 @@ function wireEvents() {
   });
 
   elements.calendarPane.addEventListener('drop', async (event) => {
-    const taskId = Number(event.dataTransfer.getData('application/x-bloco-task'));
+    const taskId = Number(
+      event.dataTransfer.getData('application/x-rics-time-blocking-task')
+    );
     if (!taskId) return;
     event.preventDefault();
     const target = updateDropPreview(event);
@@ -2198,6 +2384,7 @@ function wireEvents() {
 }
 
 async function init() {
+  await prepareDatabase();
   await Promise.all([
     loadPreferences(),
     getIntegration('fizzy').then((connection) => {
@@ -2214,7 +2401,10 @@ async function init() {
     },
     async onRequestEventDetails(event) {
       const task = Number.isFinite(event.taskId) ? await getTask(event.taskId) : null;
-      openTaskProjectDialog(task);
+      openTaskProjectDialog(task, {
+        eventId: event.id,
+        eventTitle: event.title
+      });
     },
     async onUpdate(id, changes) {
       await updateEvent(id, changes);
