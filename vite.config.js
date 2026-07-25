@@ -1,5 +1,9 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const projectRoot = fileURLToPath(new URL('.', import.meta.url));
 
 const integrationProxy = {
   '/fizzy-api': {
@@ -15,6 +19,14 @@ const integrationProxy = {
 };
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      input: {
+        app: resolve(projectRoot, 'index.html'),
+        manual: resolve(projectRoot, 'manual.html')
+      }
+    }
+  },
   server: {
     proxy: integrationProxy
   },
