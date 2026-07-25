@@ -48,9 +48,7 @@
         min-width: 320px;
         margin: 0;
         overflow-x: hidden;
-        background:
-          radial-gradient(circle at 78% 1%, rgba(85, 154, 125, 0.14), transparent 30rem),
-          var(--canvas);
+        background: var(--canvas);
         color: var(--ink);
       }
 
@@ -106,9 +104,7 @@
         flex-direction: column;
         padding: 24px 18px 18px;
         overflow-y: auto;
-        background:
-          radial-gradient(circle at 10% 4%, rgba(120, 198, 163, 0.13), transparent 17rem),
-          var(--forest-950);
+        background: var(--forest-950);
         color: #f0f7f3;
       }
 
@@ -118,9 +114,11 @@
         gap: 11px;
         padding: 2px 7px 22px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.11);
+        color: inherit;
         font-size: 15px;
         font-weight: 760;
         letter-spacing: -0.01em;
+        text-decoration: none;
       }
 
       .brand-mark {
@@ -443,9 +441,7 @@
 
       .mock-calendar {
         padding: 22px 12px 12px;
-        background:
-          linear-gradient(to right, transparent calc(100% - 1px), #e7ece9 0) 0 0 / 20% 100%,
-          linear-gradient(to bottom, transparent calc(100% - 1px), #edf1ef 0) 0 0 / 100% 38px;
+        background: #ffffff;
       }
 
       .mock-calendar-head {
@@ -601,9 +597,7 @@
 
       .card-dark {
         border-color: var(--forest-950);
-        background:
-          radial-gradient(circle at 90% 10%, rgba(120, 198, 163, 0.18), transparent 19rem),
-          var(--forest-950);
+        background: var(--forest-950);
         color: #dce9e2;
       }
 
@@ -1098,9 +1092,7 @@
         gap: 50px;
         padding: clamp(42px, 7vw, 82px);
         border-radius: 20px;
-        background:
-          radial-gradient(circle at 85% 15%, rgba(120, 198, 163, 0.18), transparent 21rem),
-          var(--forest-950);
+        background: var(--forest-950);
         color: #ffffff;
         box-shadow: var(--shadow);
       }
@@ -1443,10 +1435,10 @@
     <div class="manual-view" id="pt" data-language="pt">
       <div class="shell" id="pt-top">
         <aside class="side" aria-label="Navegação do manual">
-          <div class="brand">
+          <a class="brand" href="./#pt" aria-label="Voltar para a página inicial">
             <span class="brand-mark" aria-hidden="true"></span>
             <span>Rics Time-blocking</span>
-          </div>
+          </a>
           <div class="language-switch" aria-label="Idioma">
             <a href="#pt" lang="pt-BR" aria-current="page">PT</a>
             <a href="#en" lang="en">EN</a>
@@ -2264,10 +2256,10 @@
     <div class="manual-view" id="en" data-language="en" hidden>
       <div class="shell" id="en-top">
         <aside class="side" aria-label="Manual navigation">
-          <div class="brand">
+          <a class="brand" href="./#en" aria-label="Back to the home page">
             <span class="brand-mark" aria-hidden="true"></span>
             <span>Rics Time-blocking</span>
-          </div>
+          </a>
           <div class="language-switch" aria-label="Language">
             <a href="#pt" lang="pt-BR">PT</a>
             <a href="#en" lang="en" aria-current="page">EN</a>

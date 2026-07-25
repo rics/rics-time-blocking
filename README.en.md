@@ -1,6 +1,6 @@
 # Rics Time-blocking
 
-[Complete manual: installation, usage, backup, and maintenance](manual.html#en) · [Versão em português](README.md)
+[Official site](https://rics.github.io/rics-time-blocking/#en) · [Complete manual](https://rics.github.io/rics-time-blocking/docs.html#en) · [Versão em português](README.md)
 
 **Rics Time-blocking** is a time-blocking calendar for turning tasks into reserved time on your schedule. Create a task list, then drag each task onto the calendar to decide when you intend to work on it.
 

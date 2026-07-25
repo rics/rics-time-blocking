@@ -23,7 +23,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         app: resolve(projectRoot, 'index.html'),
-        manual: resolve(projectRoot, 'manual.html')
+        landing: resolve(projectRoot, 'site/index.html'),
+        docs: resolve(projectRoot, 'site/docs.html')
       }
     }
   },
