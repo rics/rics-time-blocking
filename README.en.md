@@ -17,6 +17,7 @@ Your data stays in your own browser. No account is required, and tasks, blocks, 
 - Create color-coded projects and associate each task with one project.
 - Import open cards from Fizzy or Trello if you choose to connect those tools.
 - Export and import JSON backups to move your data between browsers or devices.
+- Switch the entire interface, calendar, and reports between Portuguese and English.
 
 When you delete a task, its future blocks are removed. Blocks that have already started are kept as history.
 
@@ -27,7 +28,7 @@ When you delete a task, its future blocks are removed. Blocks that have already 
 3. Drag the block or one of its edges to move it or adjust its duration.
 4. The task remains in the list, ready to be scheduled again whenever you need it.
 
-Use the three-dot menu in the top-right corner to export a backup. When importing, you can choose to merge data with the existing data or replace it.
+In the top bar, use PT/EN to switch languages and the gear button to open Settings. Under **System backup**, you can export a copy or import data in merge or replace mode.
 
 ## Prerequisites
 

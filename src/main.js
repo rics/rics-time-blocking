@@ -49,6 +49,19 @@ import {
   reportCsv,
   reportPdf
 } from './reports.js';
+import { appError } from './app-error.js';
+import {
+  detectLocale,
+  formatDate,
+  formatNumber,
+  getLocale,
+  localizedError,
+  localizeTree,
+  normalizeLocale,
+  setLocale,
+  t,
+  translateLiteral
+} from './i18n.js';
 
 const DEFAULT_BLOCK_DURATION_MINUTES = 30;
 const CALENDAR_RANGE_MARGIN_DAYS = 7;
@@ -75,11 +88,22 @@ app.innerHTML = `
         </div>
       </div>
 
+      <nav class="app-navigation" aria-label="Navegação principal">
+        <button class="app-navigation-link is-active" id="planning-navigation" type="button" aria-current="page" title="Planejamento">
+          <i class="ph ph-calendar-blank" aria-hidden="true"></i>
+          <span>Planejamento</span>
+        </button>
+        <button class="app-navigation-link" id="reports-navigation" type="button" title="Relatórios">
+          <i class="ph ph-chart-bar" aria-hidden="true"></i>
+          <span>Relatórios</span>
+        </button>
+      </nav>
+
       <div class="global-nav-end">
-        <nav class="app-navigation" aria-label="Navegação principal">
-          <button class="app-navigation-link is-active" id="planning-navigation" type="button" aria-current="page">Planejamento</button>
-          <button class="app-navigation-link" id="reports-navigation" type="button">Relatórios</button>
-        </nav>
+        <div class="language-switch" role="group" aria-label="Idioma">
+          <button type="button" data-locale="pt-BR" lang="pt-BR">PT</button>
+          <button type="button" data-locale="en" lang="en">EN</button>
+        </div>
         <button class="icon-button global-settings-button" id="settings-navigation" type="button" aria-label="Configurações" title="Configurações">
           <i class="ph ph-gear-six" aria-hidden="true"></i>
         </button>
@@ -484,7 +508,7 @@ app.innerHTML = `
       <div class="dialog-heading">
         <div>
           <p class="dialog-kicker">Projeto da tarefa</p>
-          <h2 id="task-project-dialog-title"></h2>
+          <h2 id="task-project-dialog-title" data-i18n-skip></h2>
         </div>
         <button class="icon-button dialog-close" type="button" data-close-dialog aria-label="Fechar" title="Fechar">
           <i class="ph ph-x" aria-hidden="true"></i>
@@ -587,7 +611,7 @@ app.innerHTML = `
         <i class="ph ph-x" aria-hidden="true"></i>
       </button>
     </div>
-    <p id="import-file-name" class="dialog-copy"></p>
+    <p id="import-file-name" class="dialog-copy" data-i18n-skip></p>
     <div class="import-options">
       <button class="import-option" type="button" data-import-mode="merge">
         <strong>Mesclar</strong>
@@ -771,6 +795,7 @@ const elements = {
   planningNavigation: document.querySelector('#planning-navigation'),
   reportsNavigation: document.querySelector('#reports-navigation'),
   settingsNavigation: document.querySelector('#settings-navigation'),
+  localeButtons: Array.from(document.querySelectorAll('[data-locale]')),
   reportsScreen: document.querySelector('#reports-screen'),
   settingsScreen: document.querySelector('#settings-screen'),
   reportForm: document.querySelector('#report-form'),
@@ -901,12 +926,49 @@ const state = {
     syncing: false
   },
   preferences: {
+    locale: detectLocale(),
     view: 'week',
     sidebarHidden: false,
     narrowWeekend: false,
     hideWeekends: false
   }
 };
+
+async function applyApplicationLocale(locale, { persist = false } = {}) {
+  const normalized = setLocale(locale);
+  state.preferences.locale = normalized;
+  document.documentElement.lang = normalized;
+  document.querySelector('meta[name="description"]')?.setAttribute('content', t('app.description'));
+
+  for (const button of elements.localeButtons) {
+    const active = normalizeLocale(button.dataset.locale) === normalized;
+    button.classList.toggle('is-active', active);
+    button.setAttribute('aria-pressed', String(active));
+    button.toggleAttribute('aria-current', active);
+  }
+
+  localizeTree(app, normalized);
+  state.calendar?.setLocale(normalized);
+  if (state.calendar) formatRangeTitle();
+
+  if (state.initialized) {
+    renderTasks();
+    renderProjects();
+    renderIntegrationConnections();
+    renderProjectColorPresets();
+    if (state.report.generated) {
+      renderReportRows(state.report.rows, state.report.mode);
+    } else {
+      clearReportOutput();
+    }
+    if (elements.historyDialog.open) updateHistoryPreview();
+    if (elements.shell.dataset.screen === 'settings') {
+      refreshDatabaseStats().catch(console.error);
+    }
+  }
+
+  if (persist) await setSetting('locale', normalized);
+}
 
 function notify(message, type = 'success') {
   const toast = document.createElement('div');
@@ -915,7 +977,7 @@ function notify(message, type = 'success') {
     <i class="ph ${type === 'error' ? 'ph-warning-circle' : 'ph-check-circle'}" aria-hidden="true"></i>
     <span></span>
   `;
-  toast.querySelector('span').textContent = message;
+  toast.querySelector('span').textContent = translateLiteral(message);
   elements.toastRegion.append(toast);
 
   window.setTimeout(() => {
@@ -925,7 +987,7 @@ function notify(message, type = 'success') {
 }
 
 function taskCountLabel(count) {
-  return count === 1 ? '1 tarefa' : `${count} tarefas`;
+  return t('task.count', { count });
 }
 
 function addLocalDays(value, amount) {
@@ -975,10 +1037,10 @@ function monthsAgo(months) {
 }
 
 function formatStoredDate(value) {
-  if (!value) return 'Sem histórico';
+  if (!value) return translateLiteral('Sem histórico');
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return 'Data indisponível';
-  return new Intl.DateTimeFormat('pt-BR', {
+  if (!Number.isFinite(date.getTime())) return translateLiteral('Data indisponível');
+  return formatDate(date, {
     day: '2-digit',
     month: 'short',
     year: 'numeric'
@@ -986,7 +1048,7 @@ function formatStoredDate(value) {
 }
 
 function formatStorageSize(bytes) {
-  if (!Number.isFinite(bytes)) return 'Não disponível';
+  if (!Number.isFinite(bytes)) return translateLiteral('Não disponível');
   if (bytes < 1024) return `${bytes} B`;
   const units = ['KB', 'MB', 'GB', 'TB'];
   let value = bytes / 1024;
@@ -995,15 +1057,15 @@ function formatStorageSize(bytes) {
     value /= 1024;
     unit = units[index];
   }
-  return `${new Intl.NumberFormat('pt-BR', {
+  return `${formatNumber(value, {
     maximumFractionDigits: value < 10 ? 1 : 0
-  }).format(value)} ${unit}`;
+  })} ${unit}`;
 }
 
 function normalizeSearch(value) {
   return value
     .trim()
-    .toLocaleLowerCase('pt-BR')
+    .toLocaleLowerCase(getLocale())
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 }
@@ -1015,12 +1077,12 @@ function filteredTasks() {
 }
 
 function setTaskFormStatus(message = '', type = '') {
-  elements.addTaskStatus.textContent = message;
+  elements.addTaskStatus.textContent = translateLiteral(message);
   elements.addTaskStatus.dataset.type = type;
 }
 
 function setProjectFormStatus(message = '', type = '') {
-  elements.projectFormStatus.textContent = message;
+  elements.projectFormStatus.textContent = translateLiteral(message);
   elements.projectFormStatus.dataset.type = type;
 }
 
@@ -1051,7 +1113,7 @@ function renderProjectColorPresets() {
     button.className = 'project-color-preset';
     button.dataset.color = color;
     button.style.backgroundColor = color;
-    button.setAttribute('aria-label', `Usar a cor ${color}`);
+    button.setAttribute('aria-label', t('color.use', { color }));
     button.title = color;
     button.addEventListener('click', () => setProjectColor(color));
     elements.projectColorPresets.append(button);
@@ -1060,7 +1122,9 @@ function renderProjectColorPresets() {
 
 function openProjectDialog(project = null) {
   state.editingProjectId = project?.id ?? null;
-  elements.projectDialogTitle.textContent = project ? 'Editar projeto' : 'Novo projeto';
+  elements.projectDialogTitle.textContent = translateLiteral(
+    project ? 'Editar projeto' : 'Novo projeto'
+  );
   elements.projectName.value = project?.name || '';
   setProjectColor(project?.color || PROJECT_COLOR_PRESETS[0]);
   setProjectFormStatus();
@@ -1070,7 +1134,7 @@ function openProjectDialog(project = null) {
 }
 
 function setTaskProjectFormStatus(message = '', type = '') {
-  elements.taskProjectFormStatus.textContent = message;
+  elements.taskProjectFormStatus.textContent = translateLiteral(message);
   elements.taskProjectFormStatus.dataset.type = type;
 }
 
@@ -1078,7 +1142,7 @@ function populateTaskProjectSelect(task) {
   elements.taskProjectSelect.replaceChildren();
   const noProject = document.createElement('option');
   noProject.value = '';
-  noProject.textContent = 'Sem projeto';
+  noProject.textContent = translateLiteral('Sem projeto');
   noProject.selected = task?.projectId == null;
   elements.taskProjectSelect.append(noProject);
 
@@ -1086,6 +1150,7 @@ function populateTaskProjectSelect(task) {
     const option = document.createElement('option');
     option.value = String(project.id);
     option.textContent = project.name;
+    option.dataset.i18nSkip = '';
     option.selected = Number(task?.projectId) === Number(project.id);
     elements.taskProjectSelect.append(option);
   }
@@ -1095,13 +1160,14 @@ function openTaskProjectDialog(task, { eventId = null, eventTitle = '' } = {}) {
   state.editingTaskId = task?.id ?? null;
   state.editingEventId = eventId;
   const isCalendarEvent = eventId != null;
-  elements.taskProjectDialogTitle.textContent = task?.title || eventTitle || 'Tarefa';
+  elements.taskProjectDialogTitle.textContent =
+    task?.title || eventTitle || translateLiteral('Tarefa');
   elements.taskProjectSelect.disabled = !task;
   document.querySelector('#save-task-project').disabled = !task;
   elements.removeTaskOrEvent.disabled = !task && !isCalendarEvent;
-  elements.removeTaskOrEvent.querySelector('span').textContent = isCalendarEvent
-    ? 'Remover este bloco'
-    : 'Remover tarefa';
+  elements.removeTaskOrEvent.querySelector('span').textContent = translateLiteral(
+    isCalendarEvent ? 'Remover este bloco' : 'Remover tarefa'
+  );
   populateTaskProjectSelect(task);
   setTaskProjectFormStatus(
     task
@@ -1125,6 +1191,7 @@ function renderProjects() {
       <h3>Sem projetos ainda</h3>
       <p>Crie um projeto para organizar tarefas e dar cor aos seus blocos.</p>
     `;
+    localizeTree(empty);
     elements.projectList.append(empty);
     return;
   }
@@ -1140,11 +1207,13 @@ function renderProjects() {
       <button class="project-delete" type="button" aria-label="Excluir projeto" title="Excluir projeto"><i class="ph ph-trash" aria-hidden="true"></i></button>
     `;
     row.querySelector('.project-color-swatch').style.backgroundColor = project.color;
+    row.querySelector('strong').dataset.i18nSkip = '';
     row.querySelector('strong').textContent = project.name;
-    row.querySelector('small').textContent = count === 1 ? '1 tarefa' : `${count} tarefas`;
+    row.querySelector('small').textContent = t('project.taskCount', { count });
+    localizeTree(row);
     row.querySelector('.project-edit').addEventListener('click', () => openProjectDialog(project));
     row.querySelector('.project-delete').addEventListener('click', async () => {
-      const confirmation = `Excluir o projeto “${project.name}”? As tarefas ficarão sem projeto.`;
+      const confirmation = t('project.deleteConfirm', { name: project.name });
       if (!window.confirm(confirmation)) return;
 
       try {
@@ -1156,7 +1225,8 @@ function renderProjects() {
             : 'Projeto excluído.'
         );
       } catch (error) {
-        notify(error.message, 'error');
+        console.error(error);
+        notify(localizedError(error), 'error');
       }
     });
     elements.projectList.append(row);
@@ -1172,21 +1242,23 @@ function openAddTaskDialog() {
 }
 
 function formatLastSync(value) {
-  if (!value) return 'Pronto para sincronizar';
+  if (!value) return getLocale() === 'en' ? 'Ready to sync' : 'Pronto para sincronizar';
 
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return 'Pronto para sincronizar';
+  if (!Number.isFinite(date.getTime())) {
+    return getLocale() === 'en' ? 'Ready to sync' : 'Pronto para sincronizar';
+  }
 
-  return `Sincronizado em ${new Intl.DateTimeFormat('pt-BR', {
+  return t('sync.last', { date: formatDate(date, {
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',
     minute: '2-digit'
-  }).format(date)}`;
+  }) });
 }
 
 function setFizzyFormStatus(message = '', type = '') {
-  elements.fizzyFormStatus.textContent = message;
+  elements.fizzyFormStatus.textContent = translateLiteral(message);
   elements.fizzyFormStatus.dataset.type = type;
 }
 
@@ -1197,6 +1269,7 @@ function populateFizzyAccounts(accounts, selectedSlug) {
     const option = document.createElement('option');
     option.value = account.slug;
     option.textContent = account.name;
+    option.dataset.i18nSkip = '';
     option.dataset.accountId = account.id;
     option.selected = account.slug === selectedSlug;
     elements.fizzyAccount.append(option);
@@ -1231,12 +1304,12 @@ function renderIntegrationConnections() {
 
   for (const item of connections) {
     item.button.disabled = item.syncing;
-    item.button.textContent = item.connection ? 'Configurar' : 'Conectar';
+    item.button.textContent = translateLiteral(item.connection ? 'Configurar' : 'Conectar');
     item.status.textContent = item.syncing
-      ? 'Sincronizando…'
+      ? translateLiteral('Sincronizando…')
       : item.connection
         ? `${item.connectionLabel} · ${formatLastSync(item.connection.lastSyncedAt)}`
-        : 'Não conectado';
+        : translateLiteral('Não conectado');
   }
 
   elements.syncAllIcons.replaceChildren();
@@ -1251,9 +1324,11 @@ function renderIntegrationConnections() {
   elements.syncAllButton.disabled = connected.length === 0 || syncing;
   elements.syncAllButton.classList.toggle('is-syncing', syncing);
   elements.syncAllButton.setAttribute('aria-busy', String(syncing));
-  elements.syncAllButton.title = connected.length
-    ? 'Sincronizar aplicativos conectados'
-    : 'Conecte um aplicativo nas Configurações';
+  elements.syncAllButton.title = translateLiteral(
+    connected.length
+      ? 'Sincronizar aplicativos conectados'
+      : 'Conecte um aplicativo nas Configurações'
+  );
 }
 
 function renderFizzyConnection() {
@@ -1264,14 +1339,16 @@ async function openFizzyDialog() {
   state.fizzy.connection = await getIntegration('fizzy');
   state.fizzy.accounts = [];
   elements.fizzyToken.value = '';
-  elements.fizzyToken.placeholder = state.fizzy.connection
-    ? 'Token salvo. Preencha apenas para trocar'
-    : 'Cole o token gerado no Fizzy';
+  elements.fizzyToken.placeholder = translateLiteral(
+    state.fizzy.connection
+      ? 'Token salvo. Preencha apenas para trocar'
+      : 'Cole o token gerado no Fizzy'
+  );
   elements.fizzyDisconnectButton.hidden = !state.fizzy.connection;
   elements.fizzySaveButton.disabled = !state.fizzy.connection;
   setFizzyFormStatus(
     state.fizzy.connection
-      ? `Conectado à conta ${state.fizzy.connection.accountName}.`
+      ? t('sync.connectedAccount', { name: state.fizzy.connection.accountName })
       : ''
   );
 
@@ -1300,7 +1377,11 @@ async function verifyFizzyToken() {
 
   elements.fizzyVerifyButton.disabled = true;
   elements.fizzySaveButton.disabled = true;
-  setFizzyFormStatus('Verificando o token e buscando contas...');
+  setFizzyFormStatus(
+    getLocale() === 'en'
+      ? 'Checking the token and loading accounts...'
+      : 'Verificando o token e buscando contas...'
+  );
 
   try {
     const accounts = await fetchFizzyAccounts(token);
@@ -1315,14 +1396,15 @@ async function verifyFizzyToken() {
     elements.fizzySaveButton.disabled = false;
     setFizzyFormStatus(
       accounts.length === 1
-        ? 'Token válido. Uma conta encontrada.'
-        : `Token válido. ${accounts.length} contas encontradas.`,
+        ? t('sync.fizzyAccounts.one')
+        : t('sync.fizzyAccounts.many', { count: accounts.length }),
       'success'
     );
   } catch (error) {
     state.fizzy.accounts = [];
     populateFizzyAccounts([], '');
-    setFizzyFormStatus(error.message, 'error');
+    console.error(error);
+    setFizzyFormStatus(localizedError(error), 'error');
   } finally {
     elements.fizzyVerifyButton.disabled = false;
   }
@@ -1330,10 +1412,17 @@ async function verifyFizzyToken() {
 
 function syncSummary(result) {
   const parts = [];
-  if (result.added) parts.push(`${result.added} adicionada${result.added === 1 ? '' : 's'}`);
-  if (result.updated) parts.push(`${result.updated} atualizada${result.updated === 1 ? '' : 's'}`);
-  if (result.removed) parts.push(`${result.removed} removida${result.removed === 1 ? '' : 's'}`);
-  return parts.length ? parts.join(', ') : 'Nenhuma mudança';
+  const english = getLocale() === 'en';
+  if (result.added) {
+    parts.push(`${result.added} ${english ? `added` : `adicionada${result.added === 1 ? '' : 's'}`}`);
+  }
+  if (result.updated) {
+    parts.push(`${result.updated} ${english ? `updated` : `atualizada${result.updated === 1 ? '' : 's'}`}`);
+  }
+  if (result.removed) {
+    parts.push(`${result.removed} ${english ? `removed` : `removida${result.removed === 1 ? '' : 's'}`}`);
+  }
+  return parts.length ? parts.join(', ') : (english ? 'No changes' : 'Nenhuma mudança');
 }
 
 async function syncFizzy({ announce = true, refresh = true } = {}) {
@@ -1356,10 +1445,16 @@ async function syncFizzy({ announce = true, refresh = true } = {}) {
       lastSyncedAt: new Date().toISOString()
     });
     if (refresh) await refreshData();
-    if (announce) notify(`Fizzy sincronizado. ${syncSummary(result)}.`);
+    if (announce) {
+      notify(
+        getLocale() === 'en'
+          ? `Fizzy synced. ${syncSummary(result)}.`
+          : `Fizzy sincronizado. ${syncSummary(result)}.`
+      );
+    }
     return { source: 'fizzy', result };
   } catch (error) {
-    if (announce) notify(error.message, 'error');
+    if (announce) notify(localizedError(error), 'error');
     return { source: 'fizzy', error };
   } finally {
     state.fizzy.syncing = false;
@@ -1368,7 +1463,7 @@ async function syncFizzy({ announce = true, refresh = true } = {}) {
 }
 
 function setTrelloFormStatus(message = '', type = '') {
-  elements.trelloFormStatus.textContent = message;
+  elements.trelloFormStatus.textContent = translateLiteral(message);
   elements.trelloFormStatus.dataset.type = type;
 }
 
@@ -1418,8 +1513,9 @@ function updateTrelloSelectionState() {
     for (const listInput of listInputs) listInput.disabled = !boardInput.checked;
   }
 
-  elements.trelloBoardCount.textContent =
-    boardInputs.length === 1
+  elements.trelloBoardCount.textContent = getLocale() === 'en'
+    ? `${selectedCount} of ${boardInputs.length} ${boardInputs.length === 1 ? 'board' : 'boards'}`
+    : boardInputs.length === 1
       ? `${selectedCount} de 1 quadro`
       : `${selectedCount} de ${boardInputs.length} quadros`;
   elements.trelloSaveButton.disabled =
@@ -1467,9 +1563,13 @@ function renderTrelloBoards() {
     const boardInput = option.querySelector('[data-trello-board]');
     boardInput.value = String(board.id);
     boardInput.checked = selectedBoardIds.has(String(board.id));
+    option.querySelector('.trello-board-checkbox strong').dataset.i18nSkip = '';
     option.querySelector('.trello-board-checkbox strong').textContent = board.name;
-    option.querySelector('.trello-board-checkbox small').textContent =
-      board.lists.length === 1 ? '1 lista aberta' : `${board.lists.length} listas abertas`;
+    option.querySelector('.trello-board-checkbox small').textContent = getLocale() === 'en'
+      ? `${board.lists.length} open ${board.lists.length === 1 ? 'list' : 'lists'}`
+      : board.lists.length === 1
+        ? '1 lista aberta'
+        : `${board.lists.length} listas abertas`;
 
     const listOptions = option.querySelector('.trello-list-options');
     for (const list of board.lists) {
@@ -1485,11 +1585,13 @@ function renderTrelloBoards() {
       listInput.checked =
         selectedDoneListIds.has(String(list.id)) ||
         (suggestDoneLists && looksLikeDoneList(list.name));
+      listLabel.querySelector('span').dataset.i18nSkip = '';
       listLabel.querySelector('span').textContent = list.name;
       listOptions.append(listLabel);
     }
 
     boardInput.addEventListener('change', updateTrelloSelectionState);
+    localizeTree(option);
     elements.trelloBoardList.append(option);
   }
 
@@ -1521,15 +1623,15 @@ async function openTrelloDialog() {
   elements.trelloApiKey.value = '';
   elements.trelloToken.value = '';
   elements.trelloApiKey.placeholder = state.trello.connection
-    ? 'API Key salva. Preencha apenas para trocar'
-    : 'Cole sua API Key';
+    ? (getLocale() === 'en' ? 'API Key saved. Fill this in only to replace it' : 'API Key salva. Preencha apenas para trocar')
+    : translateLiteral('Cole sua API Key');
   elements.trelloToken.placeholder = state.trello.connection
-    ? 'Token salvo. Preencha apenas para trocar'
-    : 'Cole o token de leitura';
+    ? (getLocale() === 'en' ? 'Token saved. Fill this in only to replace it' : 'Token salvo. Preencha apenas para trocar')
+    : translateLiteral('Cole o token de leitura');
   elements.trelloDisconnectButton.hidden = !state.trello.connection;
   setTrelloFormStatus(
     state.trello.connection
-      ? `Conectado como ${state.trello.connection.memberName}.`
+      ? t('sync.connectedAs', { name: state.trello.connection.memberName })
       : ''
   );
 
@@ -1557,23 +1659,32 @@ async function verifyTrelloAccess() {
   const { apiKey, accessToken } = trelloCredentials();
   elements.trelloVerifyButton.disabled = true;
   elements.trelloSaveButton.disabled = true;
-  setTrelloFormStatus('Verificando o acesso e buscando seus quadros...');
+  setTrelloFormStatus(
+    getLocale() === 'en'
+      ? 'Checking access and loading your boards...'
+      : 'Verificando o acesso e buscando seus quadros...'
+  );
 
   try {
     state.trello.setup = await fetchTrelloSetup(apiKey, accessToken);
     state.trello.verifiedSignature = `${apiKey}\u0000${accessToken}`;
     renderTrelloBoards();
     setTrelloFormStatus(
-      state.trello.setup.boards.length === 1
-        ? 'Acesso válido. Um quadro aberto encontrado.'
-        : `Acesso válido. ${state.trello.setup.boards.length} quadros abertos encontrados.`,
+      getLocale() === 'en'
+        ? `Access verified. ${state.trello.setup.boards.length} open ${
+            state.trello.setup.boards.length === 1 ? 'board' : 'boards'
+          } found.`
+        : state.trello.setup.boards.length === 1
+          ? 'Acesso válido. Um quadro aberto encontrado.'
+          : `Acesso válido. ${state.trello.setup.boards.length} quadros abertos encontrados.`,
       'success'
     );
   } catch (error) {
     state.trello.setup = null;
     state.trello.verifiedSignature = '';
     renderTrelloBoards();
-    setTrelloFormStatus(error.message, 'error');
+    console.error(error);
+    setTrelloFormStatus(localizedError(error), 'error');
   } finally {
     elements.trelloVerifyButton.disabled = false;
   }
@@ -1584,12 +1695,17 @@ function openTrelloAuthorization() {
     const url = trelloAuthorizationUrl(trelloCredentials().apiKey);
     const authorizationWindow = window.open(url, '_blank');
     if (!authorizationWindow) {
-      throw new Error('O navegador bloqueou a janela de autorização do Trello.');
+      throw appError('error.trello.popupBlocked');
     }
     authorizationWindow.opener = null;
-    setTrelloFormStatus('Autorize o acesso no Trello e cole o token gerado aqui.');
+    setTrelloFormStatus(
+      getLocale() === 'en'
+        ? 'Authorize access in Trello and paste the generated token here.'
+        : 'Autorize o acesso no Trello e cole o token gerado aqui.'
+    );
   } catch (error) {
-    setTrelloFormStatus(error.message, 'error');
+    console.error(error);
+    setTrelloFormStatus(localizedError(error), 'error');
   }
 }
 
@@ -1613,10 +1729,16 @@ async function syncTrello({ announce = true, refresh = true } = {}) {
       lastSyncedAt: new Date().toISOString()
     });
     if (refresh) await refreshData();
-    if (announce) notify(`Trello sincronizado. ${syncSummary(result)}.`);
+    if (announce) {
+      notify(
+        getLocale() === 'en'
+          ? `Trello synced. ${syncSummary(result)}.`
+          : `Trello sincronizado. ${syncSummary(result)}.`
+      );
+    }
     return { source: 'trello', result };
   } catch (error) {
-    if (announce) notify(error.message, 'error');
+    if (announce) notify(localizedError(error), 'error');
     return { source: 'trello', error };
   } finally {
     state.trello.syncing = false;
@@ -1650,7 +1772,12 @@ async function syncAllConnections() {
     const failures = outcomes.filter((outcome) => outcome.error);
     if (failures.length) {
       const labels = failures.map((outcome) => TASK_SOURCES[outcome.source].label);
-      notify(`Não foi possível sincronizar: ${labels.join(' e ')}.`, 'error');
+      notify(
+        getLocale() === 'en'
+          ? `Could not sync: ${labels.join(' and ')}.`
+          : `Não foi possível sincronizar: ${labels.join(' e ')}.`,
+        'error'
+      );
       return;
     }
 
@@ -1662,9 +1789,14 @@ async function syncAllConnections() {
       }),
       { added: 0, updated: 0, removed: 0 }
     );
-    notify(`Sync concluído. ${syncSummary(totals)}.`);
+    notify(
+      getLocale() === 'en'
+        ? `Sync complete. ${syncSummary(totals)}.`
+        : `Sync concluído. ${syncSummary(totals)}.`
+    );
   } catch (error) {
-    notify(error.message || 'Não foi possível concluir a sincronização.', 'error');
+    console.error(error);
+    notify(localizedError(error), 'error');
   } finally {
     state.syncingAll = false;
     renderIntegrationConnections();
@@ -1675,7 +1807,7 @@ function renderTasks() {
   const visibleTasks = filteredTasks();
   elements.taskList.replaceChildren();
   elements.taskCount.textContent = state.taskQuery.trim() && state.tasks.length
-    ? `${visibleTasks.length} de ${taskCountLabel(state.tasks.length)}`
+    ? `${visibleTasks.length} ${getLocale() === 'en' ? 'of' : 'de'} ${taskCountLabel(state.tasks.length)}`
     : taskCountLabel(state.tasks.length);
 
   if (!state.tasks.length) {
@@ -1686,6 +1818,7 @@ function renderTasks() {
       <h3>Sua lista está livre</h3>
       <p>Use o botão “+” para adicionar sua primeira tarefa.</p>
     `;
+    localizeTree(empty);
     elements.taskList.append(empty);
     return;
   }
@@ -1698,6 +1831,7 @@ function renderTasks() {
       <h3>Nenhuma tarefa encontrada</h3>
       <p>Tente buscar por outro termo.</p>
     `;
+    localizeTree(empty);
     elements.taskList.append(empty);
     return;
   }
@@ -1724,7 +1858,7 @@ function renderTasks() {
                 ? `<img class="task-source-icon" src="${source.icon}" alt="" aria-hidden="true" title="${source.label}" /><span class="sr-only">${source.label}: </span>`
                 : ''
             }
-            <span class="task-title"></span>
+            <span class="task-title" data-i18n-skip></span>
           </span>
         </div>
       </div>
@@ -1733,16 +1867,22 @@ function renderTasks() {
       </button>
     `;
     row.querySelector('.task-title').textContent = task.title;
+    localizeTree(row);
     row.querySelector('.task-content').addEventListener('click', () => openTaskProjectDialog(task));
     row.querySelector('.task-delete').addEventListener('click', async (event) => {
       const button = event.currentTarget;
       button.disabled = true;
       try {
         await removeTaskFromList(task);
-        notify('Tarefa removida. O histórico foi preservado.');
+        notify(
+          getLocale() === 'en'
+            ? 'Task removed. History was preserved.'
+            : 'Tarefa removida. O histórico foi preservado.'
+        );
       } catch (error) {
         button.disabled = false;
-        notify(error.message, 'error');
+        console.error(error);
+        notify(localizedError(error), 'error');
       }
     });
     row.addEventListener('dragstart', (event) => {
@@ -1790,7 +1930,7 @@ function updateDropPreview(event) {
 async function createTaskBlock(taskId, { start, end }) {
   const task = await getTask(Number(taskId));
 
-  if (!task) throw new Error('A tarefa selecionada não existe mais.');
+  if (!task) throw appError('error.task.missing');
 
   const blockStart = new Date(start);
   const blockEnd = new Date(end);
@@ -1800,7 +1940,7 @@ async function createTaskBlock(taskId, { start, end }) {
     !Number.isFinite(blockEnd.getTime()) ||
     blockEnd <= blockStart
   ) {
-    throw new Error('Não foi possível determinar um período válido para o bloco.');
+    throw appError('error.block.invalidPeriod');
   }
 
   const record = await addEvent({
@@ -1841,8 +1981,8 @@ async function refreshDatabaseStats() {
     getDatabaseStats(),
     navigator.storage?.estimate?.().catch(() => null) ?? null
   ]);
-  elements.storageTaskCount.textContent = new Intl.NumberFormat('pt-BR').format(stats.taskCount);
-  elements.storageEventCount.textContent = new Intl.NumberFormat('pt-BR').format(stats.eventCount);
+  elements.storageTaskCount.textContent = formatNumber(stats.taskCount);
+  elements.storageEventCount.textContent = formatNumber(stats.eventCount);
   elements.storageOldestEvent.textContent = formatStoredDate(stats.oldestEventStart);
   elements.storageNewestEvent.textContent = formatStoredDate(stats.newestEventEnd);
   elements.storageEstimatedUsage.textContent = formatStorageSize(storageEstimate?.usage);
@@ -1862,13 +2002,14 @@ async function updateHistoryPreview() {
   updateHistoryCleanupButton();
 
   if (!cutoff) {
-    elements.historyPreview.textContent =
-      'Escolha hoje ou uma data anterior para calcular a prévia.';
+    elements.historyPreview.textContent = translateLiteral(
+      'Escolha hoje ou uma data anterior para calcular a prévia.'
+    );
     elements.historyPreview.dataset.type = 'error';
     return;
   }
 
-  elements.historyPreview.textContent = 'Calculando blocos elegíveis…';
+  elements.historyPreview.textContent = translateLiteral('Calculando blocos elegíveis…');
   elements.historyPreview.dataset.type = '';
 
   try {
@@ -1876,16 +2017,14 @@ async function updateHistoryPreview() {
     if (requestId !== state.historyPreviewRequestId) return;
     state.historyEligibleCount = count;
     elements.historyPreview.textContent = count
-      ? `${new Intl.NumberFormat('pt-BR').format(count)} ${
-          count === 1 ? 'bloco será excluído' : 'blocos serão excluídos'
-        }.`
-      : 'Nenhum bloco será excluído com esta data.';
+      ? t('history.previewCount', { count })
+      : translateLiteral('Nenhum bloco será excluído com esta data.');
     elements.historyPreview.dataset.type = count ? 'warning' : '';
     updateHistoryCleanupButton();
   } catch (error) {
     if (requestId !== state.historyPreviewRequestId) return;
-    elements.historyPreview.textContent =
-      error.message || 'Não foi possível calcular a prévia.';
+    console.error(error);
+    elements.historyPreview.textContent = localizedError(error);
     elements.historyPreview.dataset.type = 'error';
   }
 }
@@ -1906,12 +2045,12 @@ function formatRangeTitle() {
   const { start, end } = state.calendar.getRange();
   const displayEnd = new Date(end);
   const sameDay = start.toDateString() === displayEnd.toDateString();
-  const monthYear = new Intl.DateTimeFormat('pt-BR', {
+  const monthYear = new Intl.DateTimeFormat(getLocale(), {
     month: 'long',
     year: 'numeric'
   });
-  const day = new Intl.DateTimeFormat('pt-BR', { day: 'numeric' });
-  const dayMonth = new Intl.DateTimeFormat('pt-BR', {
+  const day = new Intl.DateTimeFormat(getLocale(), { day: 'numeric' });
+  const dayMonth = new Intl.DateTimeFormat(getLocale(), {
     day: 'numeric',
     month: 'long'
   });
@@ -1925,7 +2064,7 @@ function formatRangeTitle() {
   }
 
   if (sameDay) {
-    elements.rangeTitle.textContent = new Intl.DateTimeFormat('pt-BR', {
+    elements.rangeTitle.textContent = new Intl.DateTimeFormat(getLocale(), {
       day: 'numeric',
       month: 'long',
       year: 'numeric'
@@ -1936,24 +2075,32 @@ function formatRangeTitle() {
   const sameMonth =
     start.getMonth() === displayEnd.getMonth() && start.getFullYear() === displayEnd.getFullYear();
   elements.rangeTitle.textContent = sameMonth
-    ? `${day.format(start)} a ${dayMonth.format(displayEnd)}`
-    : `${dayMonth.format(start)} a ${dayMonth.format(displayEnd)}`;
+    ? t('range.join', { start: day.format(start), end: dayMonth.format(displayEnd) })
+    : t('range.join', { start: dayMonth.format(start), end: dayMonth.format(displayEnd) });
 }
 
 async function loadPreferences() {
   const isMobile = window.matchMedia('(max-width: 900px)').matches;
-  const [view, sidebarHidden, narrowWeekend, hideWeekends] = await Promise.all([
+  const [locale, view, sidebarHidden, narrowWeekend, hideWeekends] = await Promise.all([
+    getSetting('locale', detectLocale()),
     getSetting('view', isMobile ? 'day' : 'week'),
     getSetting('sidebarHidden', isMobile),
     getSetting('narrowWeekend', false),
     getSetting('hideWeekends', false)
   ]);
 
-  state.preferences = { view, sidebarHidden, narrowWeekend, hideWeekends };
+  state.preferences = {
+    locale: normalizeLocale(locale),
+    view,
+    sidebarHidden,
+    narrowWeekend,
+    hideWeekends
+  };
 }
 
 function applyPreferences() {
   state.suspendCalendarRangeLoading = true;
+  applyApplicationLocale(state.preferences.locale);
   elements.viewSelect.value = state.preferences.view;
   elements.shell.dataset.view = state.preferences.view;
   elements.narrowWeekends.setAttribute('aria-pressed', String(state.preferences.narrowWeekend));
@@ -1996,7 +2143,12 @@ function handleCalendarRangeChange() {
   if (!state.initialized || state.suspendCalendarRangeLoading) return;
   refreshCalendarEvents().catch((error) => {
     console.error(error);
-    notify('Não foi possível carregar este período.', 'error');
+    notify(
+      getLocale() === 'en'
+        ? 'This period could not be loaded.'
+        : 'Não foi possível carregar este período.',
+      'error'
+    );
   });
 }
 
@@ -2037,7 +2189,7 @@ function selectedReportProjectIds() {
 }
 
 function setReportFormStatus(message = '', type = '') {
-  elements.reportFormStatus.textContent = message;
+  elements.reportFormStatus.textContent = translateLiteral(message);
   elements.reportFormStatus.dataset.type = type;
 }
 
@@ -2045,7 +2197,9 @@ function clearReportOutput() {
   state.report = { rows: [], mode: 'grouped', generated: false };
   elements.reportExportButton.disabled = true;
   elements.reportExportPdfButton.disabled = true;
-  elements.reportResultsSummary.textContent = 'Defina os parâmetros para gerar um relatório.';
+  elements.reportResultsSummary.textContent = translateLiteral(
+    'Defina os parâmetros para gerar um relatório.'
+  );
   elements.reportResultsContent.replaceChildren();
   const empty = document.createElement('div');
   empty.className = 'report-empty-state';
@@ -2054,13 +2208,14 @@ function clearReportOutput() {
     <h3>Nenhum relatório gerado</h3>
     <p>Os resultados aparecerão aqui e só existem enquanto esta tela estiver aberta.</p>
   `;
+  localizeTree(empty);
   elements.reportResultsContent.append(empty);
 }
 
 function renderReportProjectOptions() {
   elements.reportProjectOptions.replaceChildren();
   const options = [
-    { id: REPORT_UNASSIGNED_PROJECT, name: 'Sem projeto', color: '#A0A0A0' },
+    { id: REPORT_UNASSIGNED_PROJECT, name: translateLiteral('Sem projeto'), color: '#A0A0A0' },
     ...state.projects.map((project) => ({ id: String(project.id), name: project.name, color: project.color }))
   ];
 
@@ -2079,6 +2234,9 @@ function renderReportProjectOptions() {
       updateReportFormState();
     });
     label.querySelector('.report-project-color').style.backgroundColor = option.color;
+    if (option.id !== REPORT_UNASSIGNED_PROJECT) {
+      label.querySelector('span:last-child').dataset.i18nSkip = '';
+    }
     label.querySelector('span:last-child').textContent = option.name;
     elements.reportProjectOptions.append(label);
   }
@@ -2108,8 +2266,11 @@ function renderReportRows(rows, mode) {
   elements.reportResultsContent.replaceChildren();
   const totalHours = rows.reduce((total, row) => total + row.hours, 0);
   elements.reportResultsSummary.textContent = rows.length
-    ? `${rows.length} ${rows.length === 1 ? 'linha' : 'linhas'} · ${formatHours(totalHours)}`
-    : 'Nenhum bloco encontrado para os filtros escolhidos.';
+    ? t('report.summary', {
+        rows: rows.length,
+        hours: formatHours(totalHours, getLocale())
+      })
+    : translateLiteral('Nenhum bloco encontrado para os filtros escolhidos.');
   elements.reportExportButton.disabled = rows.length === 0;
   elements.reportExportPdfButton.disabled = rows.length === 0;
 
@@ -2121,6 +2282,7 @@ function renderReportRows(rows, mode) {
       <h3>Sem resultados neste período</h3>
       <p>Tente ajustar o intervalo ou os projetos selecionados.</p>
     `;
+    localizeTree(empty);
     elements.reportResultsContent.append(empty);
     return;
   }
@@ -2134,7 +2296,7 @@ function renderReportRows(rows, mode) {
   const headRow = document.createElement('tr');
   headings.forEach((heading) => {
     const cell = document.createElement('th');
-    cell.textContent = heading;
+    cell.textContent = translateLiteral(heading);
     headRow.append(cell);
   });
   head.append(headRow);
@@ -2143,11 +2305,18 @@ function renderReportRows(rows, mode) {
   for (const row of rows) {
     const tableRow = document.createElement('tr');
     const values = mode === 'detailed'
-      ? [row.taskTitle, row.date.split('-').reverse().join('/'), row.start, row.end, formatHours(row.hours)]
-      : [row.taskTitle, formatHours(row.hours)];
+      ? [
+          row.taskTitle,
+          formatDate(dateFromInput(row.date)),
+          row.start,
+          row.end,
+          formatHours(row.hours, getLocale())
+        ]
+      : [row.taskTitle, formatHours(row.hours, getLocale())];
     values.forEach((value) => {
       const cell = document.createElement('td');
       cell.textContent = value;
+      if (value === row.taskTitle) cell.dataset.i18nSkip = '';
       tableRow.append(cell);
     });
     body.append(tableRow);
@@ -2187,7 +2356,12 @@ function setActiveScreen(screen) {
     renderIntegrationConnections();
     refreshDatabaseStats().catch((error) => {
       console.error(error);
-      notify('Não foi possível calcular o uso de dados.', 'error');
+      notify(
+        getLocale() === 'en'
+          ? 'Data usage could not be calculated.'
+          : 'Não foi possível calcular o uso de dados.',
+        'error'
+      );
     });
   } else {
     clearReportOutput();
@@ -2199,7 +2373,7 @@ async function generateCurrentReport() {
   const mode = reportMode();
   const rangeStart = dateFromInput(elements.reportStartDate.value);
   const inclusiveEnd = dateFromInput(elements.reportEndDate.value);
-  if (!rangeStart || !inclusiveEnd) throw new Error('Escolha um período válido.');
+  if (!rangeStart || !inclusiveEnd) throw appError('error.range.invalid');
   const events = await listEventsInRange(rangeStart, addLocalDays(inclusiveEnd, 1));
   const rows = generateReport({
     events,
@@ -2207,7 +2381,8 @@ async function generateCurrentReport() {
     selectedProjectIds: selectedReportProjectIds(),
     startDate: elements.reportStartDate.value,
     endDate: elements.reportEndDate.value,
-    mode
+    mode,
+    locale: getLocale()
   });
 
   state.report = {
@@ -2221,8 +2396,8 @@ async function generateCurrentReport() {
 }
 
 function reportFileName(extension) {
-  const type = state.report.mode === 'detailed' ? 'detalhado' : 'agrupado';
-  return `rics-time-blocking-relatorio-${type}-${state.report.startDate}-a-${state.report.endDate}.${extension}`;
+  const type = t(`report.fileMode.${state.report.mode}`);
+  return `rics-time-blocking-${t('report.fileStem')}-${type}-${state.report.startDate}-${getLocale() === 'en' ? 'to' : 'a'}-${state.report.endDate}.${extension}`;
 }
 
 function downloadReportFile(blob, extension) {
@@ -2238,7 +2413,9 @@ function downloadReportFile(blob, extension) {
 
 function exportCurrentReportCsv() {
   if (!state.report.generated || !state.report.rows.length) return;
-  const blob = new Blob([reportCsv(state.report)], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob([reportCsv({ ...state.report, locale: getLocale() })], {
+    type: 'text/csv;charset=utf-8'
+  });
   downloadReportFile(blob, 'csv');
 }
 
@@ -2248,19 +2425,19 @@ async function exportCurrentReportPdf() {
   const label = button.querySelector('span');
   button.disabled = true;
   button.setAttribute('aria-busy', 'true');
-  label.textContent = 'Gerando PDF…';
+  label.textContent = translateLiteral('Gerando PDF…');
 
   try {
-    const blob = await reportPdf(state.report);
+    const blob = await reportPdf({ ...state.report, locale: getLocale() });
     downloadReportFile(blob, 'pdf');
-    notify('PDF exportado com sucesso.');
+    notify(getLocale() === 'en' ? 'PDF exported successfully.' : 'PDF exportado com sucesso.');
   } catch (error) {
     console.error(error);
-    notify('Não foi possível exportar o PDF.', 'error');
+    notify(getLocale() === 'en' ? 'The PDF could not be exported.' : 'Não foi possível exportar o PDF.', 'error');
   } finally {
     button.removeAttribute('aria-busy');
     button.disabled = !state.report.rows.length;
-    label.textContent = 'Exportar PDF';
+    label.textContent = translateLiteral('Exportar PDF');
   }
 }
 
@@ -2268,6 +2445,14 @@ function wireEvents() {
   elements.planningNavigation.addEventListener('click', () => setActiveScreen('planning'));
   elements.reportsNavigation.addEventListener('click', () => setActiveScreen('reports'));
   elements.settingsNavigation.addEventListener('click', () => setActiveScreen('settings'));
+  elements.localeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      applyApplicationLocale(button.dataset.locale, { persist: true }).catch((error) => {
+        console.error(error);
+        notify(localizedError(error), 'error');
+      });
+    });
+  });
 
   [elements.reportStartDate, elements.reportEndDate].forEach((input) => {
     input.addEventListener('change', () => {
@@ -2289,7 +2474,8 @@ function wireEvents() {
     try {
       await generateCurrentReport();
     } catch (error) {
-      setReportFormStatus(error.message || 'Não foi possível gerar o relatório.', 'error');
+      console.error(error);
+      setReportFormStatus(localizedError(error), 'error');
     }
   });
   elements.reportExportButton.addEventListener('click', exportCurrentReportCsv);
@@ -2320,10 +2506,16 @@ function wireEvents() {
   elements.fizzyToken.addEventListener('input', () => {
     if (elements.fizzyToken.value.trim()) {
       elements.fizzySaveButton.disabled = true;
-      setFizzyFormStatus('Verifique o novo token antes de salvar.');
+      setFizzyFormStatus(
+        getLocale() === 'en'
+          ? 'Verify the new token before saving.'
+          : 'Verifique o novo token antes de salvar.'
+      );
     } else if (state.fizzy.connection) {
       elements.fizzySaveButton.disabled = false;
-      setFizzyFormStatus(`Conectado à conta ${state.fizzy.connection.accountName}.`);
+      setFizzyFormStatus(
+        t('sync.connectedAccount', { name: state.fizzy.connection.accountName })
+      );
     }
   });
 
@@ -2337,7 +2529,12 @@ function wireEvents() {
       elements.fizzyToken.value.trim() || state.fizzy.connection?.accessToken || '';
 
     if (!selectedAccount || !accessToken) {
-      setFizzyFormStatus('Verifique o token e escolha uma conta.', 'error');
+      setFizzyFormStatus(
+        getLocale() === 'en'
+          ? 'Verify the token and choose an account.'
+          : 'Verifique o token e escolha uma conta.',
+        'error'
+      );
       return;
     }
 
@@ -2358,7 +2555,8 @@ function wireEvents() {
       renderFizzyConnection();
       await syncFizzy();
     } catch (error) {
-      setFizzyFormStatus(error.message, 'error');
+      console.error(error);
+      setFizzyFormStatus(localizedError(error), 'error');
     }
   });
 
@@ -2368,7 +2566,11 @@ function wireEvents() {
     state.fizzy.accounts = [];
     closeDialog(elements.fizzyDialog);
     renderFizzyConnection();
-    notify('Fizzy desconectado. As tarefas já importadas foram mantidas.');
+    notify(
+      getLocale() === 'en'
+        ? 'Fizzy disconnected. Previously imported tasks were kept.'
+        : 'Fizzy desconectado. As tarefas já importadas foram mantidas.'
+    );
   });
 
   elements.trelloSettingsButton.addEventListener('click', () => openTrelloDialog());
@@ -2378,9 +2580,13 @@ function wireEvents() {
   const handleTrelloCredentialInput = () => {
     updateTrelloSelectionState();
     if (trelloCredentialSignature() !== state.trello.verifiedSignature) {
-      setTrelloFormStatus('Verifique a nova API Key e o token antes de salvar.');
+      setTrelloFormStatus(
+        getLocale() === 'en'
+          ? 'Verify the new API Key and token before saving.'
+          : 'Verifique a nova API Key e o token antes de salvar.'
+      );
     } else if (state.trello.connection) {
-      setTrelloFormStatus(`Conectado como ${state.trello.connection.memberName}.`);
+      setTrelloFormStatus(t('sync.connectedAs', { name: state.trello.connection.memberName }));
     }
   };
 
@@ -2392,7 +2598,9 @@ function wireEvents() {
 
     if (!state.trello.setup || elements.trelloSaveButton.disabled) {
       setTrelloFormStatus(
-        'Verifique o acesso e escolha ao menos um quadro.',
+        getLocale() === 'en'
+          ? 'Verify access and choose at least one board.'
+          : 'Verifique o acesso e escolha ao menos um quadro.',
         'error'
       );
       return;
@@ -2402,7 +2610,7 @@ function wireEvents() {
     const { apiKey, accessToken } = trelloCredentials();
 
     if (!boardIds.length) {
-      setTrelloFormStatus('Escolha ao menos um quadro do Trello.', 'error');
+      setTrelloFormStatus(localizedError(appError('error.trello.boardRequired')), 'error');
       return;
     }
 
@@ -2427,7 +2635,8 @@ function wireEvents() {
       renderTrelloConnection();
       await syncTrello();
     } catch (error) {
-      setTrelloFormStatus(error.message, 'error');
+      console.error(error);
+      setTrelloFormStatus(localizedError(error), 'error');
     }
   });
 
@@ -2438,7 +2647,11 @@ function wireEvents() {
     state.trello.verifiedSignature = '';
     closeDialog(elements.trelloDialog);
     renderTrelloConnection();
-    notify('Trello desconectado. As tarefas já importadas foram mantidas.');
+    notify(
+      getLocale() === 'en'
+        ? 'Trello disconnected. Previously imported tasks were kept.'
+        : 'Trello desconectado. As tarefas já importadas foram mantidas.'
+    );
   });
 
   elements.syncAllButton.addEventListener('click', () => syncAllConnections());
@@ -2469,15 +2682,16 @@ function wireEvents() {
     try {
       if (state.editingProjectId == null) {
         await addProject(values.name, values.color);
-        notify('Projeto criado.');
+        notify(getLocale() === 'en' ? 'Project created.' : 'Projeto criado.');
       } else {
         await updateProject(state.editingProjectId, values);
-        notify('Projeto atualizado.');
+        notify(getLocale() === 'en' ? 'Project updated.' : 'Projeto atualizado.');
       }
       closeDialog(elements.projectDialog);
       await refreshData();
     } catch (error) {
-      setProjectFormStatus(error.message, 'error');
+      console.error(error);
+      setProjectFormStatus(localizedError(error), 'error');
       elements.projectName.focus();
     }
   });
@@ -2490,9 +2704,10 @@ function wireEvents() {
       await updateTaskProject(state.editingTaskId, elements.taskProjectSelect.value || null);
       closeDialog(elements.taskProjectDialog);
       await refreshData();
-      notify('Projeto da tarefa atualizado.');
+      notify(getLocale() === 'en' ? 'Task project updated.' : 'Projeto da tarefa atualizado.');
     } catch (error) {
-      setTaskProjectFormStatus(error.message, 'error');
+      console.error(error);
+      setTaskProjectFormStatus(localizedError(error), 'error');
     }
   });
 
@@ -2515,15 +2730,20 @@ function wireEvents() {
       if (eventId != null) {
         await removeEventFromCalendar(eventId);
         closeDialog(elements.taskProjectDialog);
-        notify('Bloco removido.');
+        notify(getLocale() === 'en' ? 'Block removed.' : 'Bloco removido.');
       } else {
         await removeTaskFromList(task);
         closeDialog(elements.taskProjectDialog);
-        notify('Tarefa removida. O histórico foi preservado.');
+        notify(
+          getLocale() === 'en'
+            ? 'Task removed. History was preserved.'
+            : 'Tarefa removida. O histórico foi preservado.'
+        );
       }
     } catch (error) {
       elements.removeTaskOrEvent.disabled = false;
-      setTaskProjectFormStatus(error.message, 'error');
+      console.error(error);
+      setTaskProjectFormStatus(localizedError(error), 'error');
     }
   });
 
@@ -2539,14 +2759,20 @@ function wireEvents() {
 
       if (saveMode === 'continue') {
         elements.addTaskTitle.value = '';
-        setTaskFormStatus('Tarefa adicionada. Digite a próxima.', 'success');
+        setTaskFormStatus(
+          getLocale() === 'en'
+            ? 'Task added. Enter the next one.'
+            : 'Tarefa adicionada. Digite a próxima.',
+          'success'
+        );
         elements.addTaskTitle.focus();
       } else {
         closeDialog(elements.taskDialog);
-        notify('Tarefa adicionada.');
+        notify(getLocale() === 'en' ? 'Task added.' : 'Tarefa adicionada.');
       }
     } catch (error) {
-      setTaskFormStatus(error.message, 'error');
+      console.error(error);
+      setTaskFormStatus(localizedError(error), 'error');
       elements.addTaskTitle.focus();
       elements.addTaskTitle.select();
     }
@@ -2567,7 +2793,8 @@ function wireEvents() {
       await exportBackup();
       notify('Backup exportado.');
     } catch (error) {
-      notify(error.message, 'error');
+      console.error(error);
+      notify(localizedError(error), 'error');
     }
   });
 
@@ -2588,7 +2815,8 @@ function wireEvents() {
       await exportBackup();
       notify('Backup exportado.');
     } catch (error) {
-      notify(error.message || 'Não foi possível exportar o backup.', 'error');
+      console.error(error);
+      notify(localizedError(error), 'error');
     }
   });
 
@@ -2598,7 +2826,7 @@ function wireEvents() {
 
     elements.confirmHistoryCleanup.disabled = true;
     elements.confirmHistoryCleanup.setAttribute('aria-busy', 'true');
-    elements.confirmHistoryCleanup.textContent = 'Excluindo…';
+    elements.confirmHistoryCleanup.textContent = translateLiteral('Excluindo…');
     try {
       const deletedCount = await deleteHistoricalEvents(cutoff);
       state.historyEligibleCount = 0;
@@ -2606,17 +2834,15 @@ function wireEvents() {
       clearReportOutput();
       await Promise.all([refreshData(), refreshDatabaseStats()]);
       notify(
-        `${new Intl.NumberFormat('pt-BR').format(deletedCount)} ${
-          deletedCount === 1 ? 'bloco excluído' : 'blocos excluídos'
-        }.`
+        t('history.deleteCount', { count: deletedCount })
       );
     } catch (error) {
-      elements.historyPreview.textContent =
-        error.message || 'Não foi possível excluir o histórico.';
+      console.error(error);
+      elements.historyPreview.textContent = localizedError(error);
       elements.historyPreview.dataset.type = 'error';
     } finally {
       elements.confirmHistoryCleanup.removeAttribute('aria-busy');
-      elements.confirmHistoryCleanup.textContent = 'Excluir histórico';
+      elements.confirmHistoryCleanup.textContent = translateLiteral('Excluir histórico');
       updateHistoryCleanupButton();
     }
   });
@@ -2631,14 +2857,15 @@ function wireEvents() {
 
   elements.confirmResetDatabase.addEventListener('click', async () => {
     elements.confirmResetDatabase.disabled = true;
-    elements.confirmResetDatabase.textContent = 'Apagando…';
+    elements.confirmResetDatabase.textContent = translateLiteral('Apagando…');
     try {
       await resetDatabase();
       window.location.reload();
     } catch (error) {
       elements.confirmResetDatabase.disabled = false;
-      elements.confirmResetDatabase.textContent = 'Sim, apagar tudo';
-      notify(error.message || 'Não foi possível apagar os dados.', 'error');
+      elements.confirmResetDatabase.textContent = translateLiteral('Sim, apagar tudo');
+      console.error(error);
+      notify(localizedError(error), 'error');
     }
   });
 
@@ -2659,14 +2886,14 @@ function wireEvents() {
         elements.importFile.value = '';
         state.pendingImportFile = null;
         await loadPreferences();
+        await applyApplicationLocale(state.preferences.locale);
         applyPreferences();
         await refreshData();
         await refreshDatabaseStats();
-        notify(
-          `${result.taskCount} tarefas e ${result.eventCount} blocos importados.`
-        );
+        notify(t('import.summary', { tasks: result.taskCount, events: result.eventCount }));
       } catch (error) {
-        notify(error.message, 'error');
+        console.error(error);
+        notify(localizedError(error), 'error');
       }
     });
   });
@@ -2699,9 +2926,14 @@ function wireEvents() {
         start,
         end: new Date(start.getTime() + DEFAULT_BLOCK_DURATION_MINUTES * 60_000)
       });
-      notify('Bloco de 30 minutos adicionado. Arraste a borda para ajustar.');
+      notify(
+        getLocale() === 'en'
+          ? '30-minute block added. Drag its edge to adjust it.'
+          : 'Bloco de 30 minutos adicionado. Arraste a borda para ajustar.'
+      );
     } catch (error) {
-      notify(error.message, 'error');
+      console.error(error);
+      notify(localizedError(error), 'error');
     }
   });
 
@@ -2720,8 +2952,10 @@ async function init() {
       state.trello.connection = connection || null;
     })
   ]);
+  await applyApplicationLocale(state.preferences.locale);
 
   state.calendar = createCalendar(elements.calendar, {
+    locale: state.preferences.locale,
     onRequestCreate() {
       state.calendar.clearSelection();
     },
@@ -2734,11 +2968,11 @@ async function init() {
     },
     async onUpdate(id, changes) {
       await updateEvent(id, changes);
-      notify('Bloco atualizado.');
+      notify(getLocale() === 'en' ? 'Block updated.' : 'Bloco atualizado.');
     },
     async onDelete(id) {
       await deleteEvent(id);
-      notify('Bloco removido.');
+      notify(getLocale() === 'en' ? 'Block removed.' : 'Bloco removido.');
     },
     onRangeChange: handleCalendarRangeChange,
     async onViewChange(view) {
@@ -2748,7 +2982,8 @@ async function init() {
       await setSetting('view', view);
     },
     onError(error) {
-      notify(error.message || 'Não foi possível atualizar o calendário.', 'error');
+      console.error(error);
+      notify(localizedError(error), 'error');
       refreshData();
     }
   });
@@ -2763,10 +2998,19 @@ async function init() {
 
   registerSW({
     onOfflineReady() {
-      notify('O Rics Time-blocking está pronto para uso offline.');
+      notify(
+        getLocale() === 'en'
+          ? 'Rics Time-blocking is ready for offline use.'
+          : 'O Rics Time-blocking está pronto para uso offline.'
+      );
     },
     onRegisterError() {
-      notify('Não foi possível ativar o modo offline.', 'error');
+      notify(
+        getLocale() === 'en'
+          ? 'Offline mode could not be enabled.'
+          : 'Não foi possível ativar o modo offline.',
+        'error'
+      );
     }
   });
 }
@@ -2780,5 +3024,7 @@ init().catch((error) => {
       <button type="button" onclick="window.location.reload()">Tentar novamente</button>
     </main>
   `;
-  app.querySelector('.fatal-error p').textContent = error.message;
+  console.error(error);
+  app.querySelector('.fatal-error p').textContent = localizedError(error);
+  localizeTree(app);
 });

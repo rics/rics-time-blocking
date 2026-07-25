@@ -1,3 +1,5 @@
+import { normalizeLocale } from './i18n.js';
+
 const UNASSIGNED_PROJECT = '__unassigned__';
 
 function localStartOfDay(value) {
@@ -61,7 +63,8 @@ function splitEventIntoDays(event, rangeStart, rangeEnd, taskById) {
 
 export const REPORT_UNASSIGNED_PROJECT = UNASSIGNED_PROJECT;
 
-export function generateReport({ events, tasks, selectedProjectIds, startDate, endDate, mode }) {
+export function generateReport({ events, tasks, selectedProjectIds, startDate, endDate, mode, locale = 'pt-BR' }) {
+  const normalizedLocale = normalizeLocale(locale);
   const rangeStart = localStartOfDay(startDate);
   const rangeEnd = addDays(localStartOfDay(endDate), 1);
   const taskById = new Map(tasks.map((task) => [Number(task.id), task]));
@@ -82,7 +85,7 @@ export function generateReport({ events, tasks, selectedProjectIds, startDate, e
     .flatMap((event) => splitEventIntoDays(event, rangeStart, rangeEnd, taskById));
 
   if (mode === 'detailed') {
-    return segments.sort((first, second) => first.sortTime - second.sortTime || first.taskTitle.localeCompare(second.taskTitle, 'pt-BR'));
+    return segments.sort((first, second) => first.sortTime - second.sortTime || first.taskTitle.localeCompare(second.taskTitle, normalizedLocale));
   }
 
   const grouped = new Map();
@@ -102,11 +105,11 @@ export function generateReport({ events, tasks, selectedProjectIds, startDate, e
   }
 
   return Array.from(grouped.values()).sort(
-    (first, second) => first.sortTime - second.sortTime || first.taskTitle.localeCompare(second.taskTitle, 'pt-BR')
+    (first, second) => first.sortTime - second.sortTime || first.taskTitle.localeCompare(second.taskTitle, normalizedLocale)
   );
 }
 
-export function formatHours(hours) {
+export function formatHours(hours, locale = 'pt-BR') {
   const totalMinutes = Math.round(hours * 60);
   const wholeHours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
@@ -115,20 +118,26 @@ export function formatHours(hours) {
   return `${wholeHours} h ${minutes} min`;
 }
 
-function formatHoursLong(hours) {
+function formatHoursLong(hours, locale = 'pt-BR') {
+  const normalizedLocale = normalizeLocale(locale);
   const totalMinutes = Math.round(hours * 60);
   const wholeHours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  const hoursLabel = `${wholeHours} ${wholeHours === 1 ? 'hora' : 'horas'}`;
-  const minutesLabel = `${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+  const hoursLabel = normalizedLocale === 'en'
+    ? `${wholeHours} ${wholeHours === 1 ? 'hour' : 'hours'}`
+    : `${wholeHours} ${wholeHours === 1 ? 'hora' : 'horas'}`;
+  const minutesLabel = normalizedLocale === 'en'
+    ? `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
+    : `${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
 
   if (!minutes) return hoursLabel;
   if (!wholeHours) return minutesLabel;
-  return `${hoursLabel} e ${minutesLabel}`;
+  return `${hoursLabel} ${normalizedLocale === 'en' ? 'and' : 'e'} ${minutesLabel}`;
 }
 
-function formatReportDate(value) {
-  return String(value).split('-').reverse().join('/');
+function formatReportDate(value, locale = 'pt-BR') {
+  const date = localStartOfDay(value);
+  return new Intl.DateTimeFormat(normalizeLocale(locale)).format(date);
 }
 
 function drawInlineText(doc, segments, x, y, fontSize) {
@@ -142,7 +151,9 @@ function drawInlineText(doc, segments, x, y, fontSize) {
   }
 }
 
-export async function reportPdf({ rows, mode, startDate, endDate }) {
+export async function reportPdf({ rows, mode, startDate, endDate, locale = 'pt-BR' }) {
+  const normalizedLocale = normalizeLocale(locale);
+  const english = normalizedLocale === 'en';
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([
     import('jspdf'),
     import('jspdf-autotable')
@@ -155,33 +166,36 @@ export async function reportPdf({ rows, mode, startDate, endDate }) {
   const margin = 18;
   const totalHours = rows.reduce((total, row) => total + row.hours, 0);
   const headings = mode === 'detailed'
-    ? ['Tarefa', 'Data', 'Início', 'Fim', 'Horas']
-    : ['Tarefa', 'Total de horas'];
+    ? (english ? ['Task', 'Date', 'Start', 'End', 'Hours'] : ['Tarefa', 'Data', 'Início', 'Fim', 'Horas'])
+    : (english ? ['Task', 'Total hours'] : ['Tarefa', 'Total de horas']);
   const body = rows.map((row) =>
     mode === 'detailed'
-      ? [row.taskTitle, formatReportDate(row.date), row.start, row.end, formatHours(row.hours)]
-      : [row.taskTitle, formatHours(row.hours)]
+      ? [row.taskTitle, formatReportDate(row.date, normalizedLocale), row.start, row.end, formatHours(row.hours, normalizedLocale)]
+      : [row.taskTitle, formatHours(row.hours, normalizedLocale)]
   );
-  const subtitle = mode === 'detailed' ? 'Dados Detalhados' : 'Dados Consolidados';
+  const subtitle = mode === 'detailed'
+    ? (english ? 'Detailed data' : 'Dados Detalhados')
+    : (english ? 'Consolidated data' : 'Dados Consolidados');
+  const reportTitle = english ? 'Hours Report' : 'Relatório de Horas';
 
   doc.setProperties({
-    title: 'Relatório de Horas',
-    subject: `${subtitle} de ${formatReportDate(startDate)} a ${formatReportDate(endDate)}`,
+    title: reportTitle,
+    subject: `${subtitle} ${english ? 'from' : 'de'} ${formatReportDate(startDate, normalizedLocale)} ${english ? 'to' : 'a'} ${formatReportDate(endDate, normalizedLocale)}`,
     author: 'Rics Time-blocking',
     creator: 'Rics Time-blocking'
   });
   doc.setTextColor(...ink);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(20);
-  doc.text('Relatório de Horas', margin, 21);
+  doc.text(reportTitle, margin, 21);
 
   drawInlineText(
     doc,
     [
-      { text: 'Período de ' },
-      { text: formatReportDate(startDate), bold: true },
-      { text: ' a ' },
-      { text: formatReportDate(endDate), bold: true }
+      { text: english ? 'Period from ' : 'Período de ' },
+      { text: formatReportDate(startDate, normalizedLocale), bold: true },
+      { text: english ? ' to ' : ' a ' },
+      { text: formatReportDate(endDate, normalizedLocale), bold: true }
     ],
     margin,
     33,
@@ -190,8 +204,8 @@ export async function reportPdf({ rows, mode, startDate, endDate }) {
   drawInlineText(
     doc,
     [
-      { text: 'Total de horas: ' },
-      { text: formatHoursLong(totalHours), bold: true }
+      { text: english ? 'Total hours: ' : 'Total de horas: ' },
+      { text: formatHoursLong(totalHours, normalizedLocale), bold: true }
     ],
     margin,
     42,
@@ -252,7 +266,12 @@ export async function reportPdf({ rows, mode, startDate, endDate }) {
     doc.setTextColor(...muted);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
-    doc.text(`Página ${page} de ${pageCount}`, pageWidth - margin, pageHeight - 9, { align: 'right' });
+    doc.text(
+      english ? `Page ${page} of ${pageCount}` : `Página ${page} de ${pageCount}`,
+      pageWidth - margin,
+      pageHeight - 9,
+      { align: 'right' }
+    );
   }
 
   return doc.output('blob');
@@ -263,21 +282,22 @@ function csvEscape(value) {
   return /[;"\r\n]/.test(string) ? `"${string.replaceAll('"', '""')}"` : string;
 }
 
-function csvHours(hours) {
-  return Number(hours.toFixed(2)).toLocaleString('pt-BR', {
+function csvHours(hours, locale) {
+  return Number(hours.toFixed(2)).toLocaleString(normalizeLocale(locale), {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2
   });
 }
 
-export function reportCsv({ rows, mode }) {
+export function reportCsv({ rows, mode, locale = 'pt-BR' }) {
+  const english = normalizeLocale(locale) === 'en';
   const headers = mode === 'detailed'
-    ? ['Tarefa', 'Data', 'Início', 'Fim', 'Horas']
-    : ['Tarefa', 'Total de horas'];
+    ? (english ? ['Task', 'Date', 'Start', 'End', 'Hours'] : ['Tarefa', 'Data', 'Início', 'Fim', 'Horas'])
+    : (english ? ['Task', 'Total hours'] : ['Tarefa', 'Total de horas']);
   const values = rows.map((row) =>
     mode === 'detailed'
-      ? [row.taskTitle, row.date, row.start, row.end, csvHours(row.hours)]
-      : [row.taskTitle, csvHours(row.hours)]
+      ? [row.taskTitle, row.date, row.start, row.end, csvHours(row.hours, locale)]
+      : [row.taskTitle, csvHours(row.hours, locale)]
   );
 
   return `\uFEFF${[headers, ...values].map((row) => row.map(csvEscape).join(';')).join('\r\n')}\r\n`;

@@ -1,7 +1,11 @@
 import Calendar from '@toast-ui/calendar';
 import { addDays } from './date-utils.js';
+import { normalizeLocale } from './i18n.js';
 
-const DAY_NAMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const DAY_NAMES = {
+  'pt-BR': ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
+  en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+};
 const CALENDAR_ID = 'work';
 const SOURCE_ICONS = {
   fizzy: '/fizzy.png',
@@ -102,6 +106,7 @@ function closestElementIndex(elements, clientX, clientY) {
 export function createCalendar(container, callbacks = {}) {
   const state = {
     view: 'week',
+    locale: normalizeLocale(callbacks.locale),
     narrowWeekend: false,
     hideWeekends: false,
     events: [],
@@ -129,7 +134,7 @@ export function createCalendar(container, callbacks = {}) {
     ],
     week: {
       startDayOfWeek: 1,
-      dayNames: DAY_NAMES,
+      dayNames: DAY_NAMES[state.locale],
       hourStart: 6,
       hourEnd: 22,
       taskView: false,
@@ -138,7 +143,7 @@ export function createCalendar(container, callbacks = {}) {
     },
     month: {
       startDayOfWeek: 1,
-      dayNames: DAY_NAMES,
+      dayNames: DAY_NAMES[state.locale],
       visibleWeeksCount: 0
     },
     template: {
@@ -154,28 +159,28 @@ export function createCalendar(container, callbacks = {}) {
         return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
       },
       popupDelete() {
-        return 'Excluir';
+        return state.locale === 'en' ? 'Delete' : 'Excluir';
       },
       popupEdit() {
-        return 'Editar';
+        return state.locale === 'en' ? 'Edit' : 'Editar';
       },
       popupDetailDate(event) {
         const start = toDate(event.start);
         const end = toDate(event.end);
-        const dateLabel = new Intl.DateTimeFormat('pt-BR', {
+        const dateLabel = new Intl.DateTimeFormat(state.locale, {
           day: '2-digit',
           month: '2-digit',
           year: 'numeric'
         }).format(start);
 
-        const timeFormat = new Intl.DateTimeFormat('pt-BR', {
+        const timeFormat = new Intl.DateTimeFormat(state.locale, {
           hour: '2-digit',
           minute: '2-digit'
         });
         return `${dateLabel}, ${timeFormat.format(start)} - ${timeFormat.format(end)}`;
       },
       popupDetailState() {
-        return 'Ocupado';
+        return state.locale === 'en' ? 'Busy' : 'Ocupado';
       }
     },
     theme: {
@@ -359,6 +364,27 @@ export function createCalendar(container, callbacks = {}) {
     setView(state.view);
   }
 
+  function setLocale(locale) {
+    state.locale = normalizeLocale(locale);
+    const visibleWeeksCount =
+      state.view === '2weeks' ? 2 : state.view === '3weeks' ? 3 : 0;
+    calendar.setOptions({
+      week: {
+        dayNames: DAY_NAMES[state.locale],
+        narrowWeekend: state.narrowWeekend,
+        workweek: state.hideWeekends
+      },
+      month: {
+        dayNames: DAY_NAMES[state.locale],
+        visibleWeeksCount,
+        narrowWeekend: state.narrowWeekend,
+        workweek: state.hideWeekends
+      }
+    });
+    calendar.render();
+    scheduleDayTotals();
+  }
+
   function move(direction) {
     if (direction < 0) calendar.prev();
     if (direction > 0) calendar.next();
@@ -389,7 +415,7 @@ export function createCalendar(container, callbacks = {}) {
 
   function formatHours(minutes) {
     const hours = minutes / 60;
-    return `${new Intl.NumberFormat('pt-BR', {
+    return `${new Intl.NumberFormat(state.locale, {
       minimumFractionDigits: 0,
       maximumFractionDigits: 2
     }).format(hours)} h`;
@@ -512,6 +538,7 @@ export function createCalendar(container, callbacks = {}) {
   return {
     instance: calendar,
     setView,
+    setLocale,
     setWeekendOptions,
     move,
     today() {

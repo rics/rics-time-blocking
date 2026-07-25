@@ -21,7 +21,7 @@ async function trelloRequest(path, credentials, parameters) {
   const accessToken = normalizeCredential(credentials?.accessToken);
 
   if (!apiKey || !accessToken) {
-    throw new Error('Informe a API Key e o token de acesso do Trello.');
+    throw appError('error.trello.credentialsRequired');
   }
 
   let response;
@@ -35,19 +35,19 @@ async function trelloRequest(path, credentials, parameters) {
       }
     );
   } catch {
-    throw new Error('Não foi possível acessar o Trello. Verifique sua conexão.');
+    throw appError('error.trello.network');
   }
 
   if (response.status === 400 || response.status === 401) {
-    throw new Error('A API Key ou o token do Trello é inválido ou expirou.');
+    throw appError('error.trello.invalidCredentials');
   }
 
   if (response.status === 403) {
-    throw new Error('O token não tem permissão para ler esses quadros.');
+    throw appError('error.trello.forbidden');
   }
 
   if (!response.ok) {
-    throw new Error(`O Trello respondeu com o erro ${response.status}.`);
+    throw appError('error.trello.response', { status: response.status });
   }
 
   return response.json();
@@ -57,7 +57,7 @@ export function trelloAuthorizationUrl(apiKey) {
   const normalizedKey = normalizeCredential(apiKey);
 
   if (!normalizedKey) {
-    throw new Error('Informe a API Key antes de gerar o token.');
+    throw appError('error.trello.apiKeyRequired');
   }
 
   const url = new URL('https://trello.com/1/authorize');
@@ -82,11 +82,11 @@ export async function fetchTrelloSetup(apiKey, accessToken) {
   ]);
 
   if (!member?.id) {
-    throw new Error('O Trello não retornou uma identificação de usuário válida.');
+    throw appError('error.trello.invalidMember');
   }
 
   if (!Array.isArray(boards)) {
-    throw new Error('O Trello retornou uma lista de quadros inválida.');
+    throw appError('error.trello.invalidBoards');
   }
 
   const boardsWithLists = await Promise.all(
@@ -139,7 +139,7 @@ export async function fetchOpenTrelloCards(connection) {
   );
 
   if (!boardIds.length) {
-    throw new Error('Escolha ao menos um quadro do Trello.');
+    throw appError('error.trello.boardRequired');
   }
 
   const cardPages = await Promise.all(
@@ -156,7 +156,7 @@ export async function fetchOpenTrelloCards(connection) {
 
   return cardPages.flatMap((cards, index) => {
     if (!Array.isArray(cards)) {
-      throw new Error('O Trello retornou uma lista de cards inválida.');
+      throw appError('error.trello.invalidCards');
     }
 
     const boardId = boardIds[index];
@@ -178,3 +178,4 @@ export async function fetchOpenTrelloCards(connection) {
       }));
   });
 }
+import { appError } from './app-error.js';

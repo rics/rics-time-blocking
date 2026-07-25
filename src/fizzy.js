@@ -26,15 +26,15 @@ async function fizzyRequest(path, accessToken) {
   });
 
   if (response.status === 401) {
-    throw new Error('O token do Fizzy é inválido ou expirou.');
+    throw appError('error.fizzy.invalidToken');
   }
 
   if (response.status === 403) {
-    throw new Error('O token não tem permissão para ler essas tarefas.');
+    throw appError('error.fizzy.forbidden');
   }
 
   if (!response.ok) {
-    throw new Error(`O Fizzy respondeu com o erro ${response.status}.`);
+    throw appError('error.fizzy.response', { status: response.status });
   }
 
   return response;
@@ -44,14 +44,14 @@ export async function fetchFizzyAccounts(accessToken) {
   const token = String(accessToken ?? '').trim();
 
   if (!token) {
-    throw new Error('Cole um token de acesso do Fizzy.');
+    throw appError('error.fizzy.tokenRequired');
   }
 
   const response = await fizzyRequest('/my/identity', token);
   const data = await response.json();
 
   if (!Array.isArray(data?.accounts) || !data.accounts.length) {
-    throw new Error('O token não dá acesso a nenhuma conta do Fizzy.');
+    throw appError('error.fizzy.noAccounts');
   }
 
   return data.accounts.map((account) => ({
@@ -66,7 +66,7 @@ export async function fetchOpenFizzyCards({ accessToken, accountSlug, accountId 
   const slug = String(accountSlug ?? '').replace(/^\/+|\/+$/g, '');
 
   if (!token || !slug || !accountId) {
-    throw new Error('A conexão com o Fizzy está incompleta.');
+    throw appError('error.fizzy.incomplete');
   }
 
   let url = proxyUrl(
@@ -79,7 +79,7 @@ export async function fetchOpenFizzyCards({ accessToken, accountSlug, accountId 
     const page = await response.json();
 
     if (!Array.isArray(page)) {
-      throw new Error('O Fizzy retornou uma lista de tarefas inválida.');
+      throw appError('error.fizzy.invalidTasks');
     }
 
     cards.push(...page);
@@ -94,3 +94,4 @@ export async function fetchOpenFizzyCards({ accessToken, accountSlug, accountId 
     sourceBoardName: typeof card.board?.name === 'string' ? card.board.name : ''
   }));
 }
+import { appError } from './app-error.js';

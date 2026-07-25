@@ -1,4 +1,5 @@
 import Dexie from 'dexie';
+import { appError } from './app-error.js';
 
 const DATABASE_NAME = 'ricsTimeBlocking';
 const LEGACY_DATABASE_NAME = 'blocoCalendar';
@@ -65,9 +66,7 @@ export async function prepareDatabase() {
     db.integrations.count()
   ]);
   if (targetHasData.some(Boolean)) {
-    throw new Error(
-      'Não foi possível migrar o banco antigo porque o novo banco já contém dados.'
-    );
+    throw appError('error.database.migrationConflict');
   }
 
   const legacyDb = defineSchema(new Dexie(LEGACY_DATABASE_NAME));
@@ -144,14 +143,14 @@ function normalizeTitle(title) {
 function normalizeColor(color) {
   const value = String(color ?? '').trim();
   if (!/^#[0-9a-f]{6}$/i.test(value)) {
-    throw new Error('Escolha uma cor válida para o projeto.');
+    throw appError('error.project.invalidColor');
   }
   return value.toUpperCase();
 }
 
-function validDate(value, message) {
+function validDate(value, errorCode) {
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) throw new Error(message);
+  if (!Number.isFinite(date.getTime())) throw appError(errorCode);
   return date;
 }
 
@@ -182,7 +181,7 @@ export async function addTask(title) {
   const normalized = normalizeTitle(title);
 
   if (!normalized) {
-    throw new Error('Digite um título para a tarefa.');
+    throw appError('error.task.titleRequired');
   }
 
   const duplicate = await db.tasks
@@ -190,7 +189,7 @@ export async function addTask(title) {
     .first();
 
   if (duplicate) {
-    throw new Error('Já existe uma tarefa com esse título.');
+    throw appError('error.task.duplicate');
   }
 
   const task = {
@@ -209,7 +208,7 @@ export async function addTaskWithEvent(title, event) {
   const end = new Date(event.end);
 
   if (!normalized) {
-    throw new Error('Digite um título para a tarefa.');
+    throw appError('error.task.titleRequired');
   }
 
   if (
@@ -217,7 +216,7 @@ export async function addTaskWithEvent(title, event) {
     !Number.isFinite(end.getTime()) ||
     end <= start
   ) {
-    throw new Error('Não foi possível determinar um período válido para o bloco.');
+    throw appError('error.block.invalidPeriod');
   }
 
   return db.transaction('rw', db.tasks, db.events, async () => {
@@ -228,7 +227,7 @@ export async function addTaskWithEvent(title, event) {
       .first();
 
     if (duplicate) {
-      throw new Error('Já existe uma tarefa com esse título.');
+      throw appError('error.task.duplicate');
     }
 
     const createdAt = new Date().toISOString();
@@ -287,9 +286,9 @@ export async function listEvents() {
 }
 
 export async function listEventsInRange(start, end) {
-  const rangeStart = validDate(start, 'O início do período é inválido.');
-  const rangeEnd = validDate(end, 'O fim do período é inválido.');
-  if (rangeEnd <= rangeStart) throw new Error('O período informado é inválido.');
+  const rangeStart = validDate(start, 'error.range.invalidStart');
+  const rangeEnd = validDate(end, 'error.range.invalidEnd');
+  if (rangeEnd <= rangeStart) throw appError('error.range.invalid');
 
   const startTime = rangeStart.getTime();
   const endTime = rangeEnd.getTime();
@@ -332,12 +331,12 @@ export async function getDatabaseStats() {
 }
 
 export async function countHistoricalEvents(cutoff) {
-  const cutoffDate = validDate(cutoff, 'Escolha uma data de corte válida.');
+  const cutoffDate = validDate(cutoff, 'error.history.invalidCutoff');
   return db.events.where('end').below(cutoffDate.toISOString()).count();
 }
 
 export async function deleteHistoricalEvents(cutoff) {
-  const cutoffDate = validDate(cutoff, 'Escolha uma data de corte válida.');
+  const cutoffDate = validDate(cutoff, 'error.history.invalidCutoff');
   const cutoffIso = cutoffDate.toISOString();
 
   return db.transaction('rw', db.events, async () => {
@@ -355,7 +354,7 @@ export async function addProject(name, color) {
   const normalizedName = normalizeTitle(name);
 
   if (!normalizedName) {
-    throw new Error('Digite um nome para o projeto.');
+    throw appError('error.project.nameRequired');
   }
 
   const duplicate = await db.projects
@@ -366,7 +365,7 @@ export async function addProject(name, color) {
     .first();
 
   if (duplicate) {
-    throw new Error('Já existe um projeto com esse nome.');
+    throw appError('error.project.duplicate');
   }
 
   const project = {
@@ -381,10 +380,10 @@ export async function addProject(name, color) {
 export async function updateProject(id, { name, color }) {
   const projectId = Number(id);
   const current = await db.projects.get(projectId);
-  if (!current) throw new Error('O projeto selecionado não existe mais.');
+  if (!current) throw appError('error.project.missing');
 
   const normalizedName = normalizeTitle(name);
-  if (!normalizedName) throw new Error('Digite um nome para o projeto.');
+  if (!normalizedName) throw appError('error.project.nameRequired');
 
   const duplicate = await db.projects
     .filter(
@@ -394,7 +393,7 @@ export async function updateProject(id, { name, color }) {
     )
     .first();
 
-  if (duplicate) throw new Error('Já existe um projeto com esse nome.');
+  if (duplicate) throw appError('error.project.duplicate');
 
   await db.projects.update(projectId, {
     name: normalizedName,
@@ -408,7 +407,7 @@ export async function deleteProject(id) {
 
   return db.transaction('rw', db.projects, db.tasks, db.events, async () => {
     const project = await db.projects.get(projectId);
-    if (!project) throw new Error('O projeto selecionado não existe mais.');
+    if (!project) throw appError('error.project.missing');
 
     const [tasks, events] = await Promise.all([
       db.tasks.where('projectId').equals(projectId).toArray(),
@@ -427,12 +426,12 @@ export async function deleteProject(id) {
 export async function updateTaskProject(taskId, projectId) {
   const id = Number(taskId);
   const task = await db.tasks.get(id);
-  if (!task) throw new Error('A tarefa selecionada não existe mais.');
+  if (!task) throw appError('error.task.missing');
 
   const normalizedProjectId = projectId == null || projectId === '' ? null : Number(projectId);
   if (normalizedProjectId != null) {
     const project = await db.projects.get(normalizedProjectId);
-    if (!project) throw new Error('O projeto selecionado não existe mais.');
+    if (!project) throw appError('error.project.missing');
   }
 
   await db.tasks.update(id, { projectId: normalizedProjectId });
@@ -492,7 +491,7 @@ export async function getIntegration(id) {
 
 export async function saveIntegration(integration) {
   if (!integration?.id || typeof integration.accessToken !== 'string') {
-    throw new Error('A configuração da integração está incompleta.');
+    throw appError('error.integration.incomplete');
   }
 
   const record = {
@@ -513,7 +512,7 @@ export async function syncExternalTasks(source, externalTasks) {
   const normalizedSource = String(source ?? '').trim();
 
   if (!normalizedSource || !Array.isArray(externalTasks)) {
-    throw new Error('Não foi possível preparar as tarefas para sincronização.');
+    throw appError('error.sync.prepare');
   }
 
   const normalizedTasks = externalTasks.map((task) => {
@@ -521,7 +520,7 @@ export async function syncExternalTasks(source, externalTasks) {
     const externalKey = String(task.externalKey ?? '').trim();
 
     if (!title || !externalKey) {
-      throw new Error('A integração retornou uma tarefa sem identificação ou título.');
+      throw appError('error.sync.invalidTask');
     }
 
     return {
@@ -536,7 +535,7 @@ export async function syncExternalTasks(source, externalTasks) {
   const duplicateKeys = new Set();
   for (const task of normalizedTasks) {
     if (duplicateKeys.has(task.externalKey)) {
-      throw new Error('A integração retornou a mesma tarefa mais de uma vez.');
+      throw appError('error.sync.duplicateTask');
     }
     duplicateKeys.add(task.externalKey);
   }

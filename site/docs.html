@@ -397,10 +397,10 @@
       }
 
       .mock-nav {
-        display: flex;
+        display: grid;
         height: 45px;
+        grid-template-columns: 1fr auto 1fr;
         align-items: center;
-        justify-content: space-between;
         padding: 0 15px;
         border-bottom: 1px solid var(--line);
       }
@@ -431,6 +431,15 @@
 
       .mock-tabs b {
         color: var(--forest-800);
+      }
+
+      .mock-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 7px;
+        color: #738079;
+        font-size: 7px;
+        font-weight: 800;
       }
 
       .mock-workspace {
@@ -1486,7 +1495,8 @@
                 </div>
                 <div class="mock-nav">
                   <div class="mock-brand"><i></i>Rics Time-blocking</div>
-                  <div class="mock-tabs"><b>Planejamento</b><span>Relatórios</span><span>Configurações</span></div>
+                  <div class="mock-tabs"><b>Planejamento</b><span>Relatórios</span></div>
+                  <div class="mock-actions"><span>PT</span><span>EN</span><span aria-label="Configurações">⚙</span></div>
                 </div>
                 <div class="mock-workspace">
                   <div class="mock-calendar">
@@ -1668,6 +1678,18 @@
                 O fluxo principal foi desenhado para ser repetido: criar, arrastar,
                 ajustar e reutilizar.
               </p>
+            </div>
+
+            <div class="callout reveal">
+              <span class="callout-icon" aria-hidden="true">PT/EN</span>
+              <div>
+                <h3>A barra superior organiza todas as telas.</h3>
+                <p>
+                  A marca fica à esquerda, Planejamento e Relatórios ao centro, e o
+                  seletor PT/EN com a engrenagem de Configurações à direita. O idioma
+                  escolhido também vale para o calendário, mensagens, CSV e PDF.
+                </p>
+              </div>
             </div>
 
             <div class="journey">
@@ -2307,7 +2329,8 @@
                 </div>
                 <div class="mock-nav">
                   <div class="mock-brand"><i></i>Rics Time-blocking</div>
-                  <div class="mock-tabs"><b>Planning</b><span>Reports</span><span>Settings</span></div>
+                  <div class="mock-tabs"><b>Planning</b><span>Reports</span></div>
+                  <div class="mock-actions"><span>PT</span><span>EN</span><span aria-label="Settings">⚙</span></div>
                 </div>
                 <div class="mock-workspace">
                   <div class="mock-calendar">
@@ -2488,6 +2511,18 @@
               <p>
                 The main flow is designed for repetition: create, drag, adjust, and reuse.
               </p>
+            </div>
+
+            <div class="callout reveal">
+              <span class="callout-icon" aria-hidden="true">PT/EN</span>
+              <div>
+                <h3>The top bar organizes every screen.</h3>
+                <p>
+                  The brand sits on the left, Planning and Reports are centered, and the
+                  PT/EN switch plus the Settings gear sit on the right. The selected
+                  language also applies to the calendar, messages, CSV, and PDF.
+                </p>
+              </div>
             </div>
 
             <div class="journey">

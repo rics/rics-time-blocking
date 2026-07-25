@@ -1,4 +1,5 @@
 import { db, getAllData } from './db.js';
+import { appError } from './app-error.js';
 
 const BACKUP_FORMAT = 'rics-time-blocking-backup';
 const LEGACY_BACKUP_FORMAT = 'bloco-backup';
@@ -11,22 +12,22 @@ function isValidDate(value) {
 
 function validateBackup(data) {
   if (!data || typeof data !== 'object') {
-    throw new Error('O arquivo não contém um backup válido.');
+    throw appError('error.backup.invalidFile');
   }
 
   if (
     ![BACKUP_FORMAT, LEGACY_BACKUP_FORMAT].includes(data.format) ||
     !SUPPORTED_BACKUP_VERSIONS.has(data.version)
   ) {
-    throw new Error('Formato ou versão de backup não suportado.');
+    throw appError('error.backup.unsupported');
   }
 
   if (!Array.isArray(data.tasks) || !Array.isArray(data.events) || !Array.isArray(data.settings)) {
-    throw new Error('O backup está incompleto.');
+    throw appError('error.backup.incomplete');
   }
 
   if (data.version >= 3 && !Array.isArray(data.projects)) {
-    throw new Error('O backup está incompleto.');
+    throw appError('error.backup.incomplete');
   }
 
   const tasksAreValid = data.tasks.every(
@@ -63,7 +64,7 @@ function validateBackup(data) {
   );
 
   if (!tasksAreValid || !eventsAreValid || !settingsAreValid || !projectsAreValid) {
-    throw new Error('O backup contém registros inválidos.');
+    throw appError('error.backup.invalidRecords');
   }
 
   return { ...data, projects };
@@ -95,14 +96,14 @@ export async function exportBackup() {
 
 export async function importBackup(file, mode = 'merge') {
   if (!['merge', 'replace'].includes(mode)) {
-    throw new Error('Modo de importação inválido.');
+    throw appError('error.backup.invalidMode');
   }
 
   let parsed;
   try {
     parsed = JSON.parse(await file.text());
   } catch {
-    throw new Error('Não foi possível ler o arquivo JSON.');
+    throw appError('error.backup.invalidJson');
   }
 
   const data = validateBackup(parsed);

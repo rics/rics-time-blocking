@@ -17,6 +17,7 @@ Os dados ficam no seu próprio navegador. Não é necessário criar conta para u
 - Criar projetos com cores e associar cada tarefa a um único projeto.
 - Importar cards em aberto do Fizzy ou Trello, caso queira conectar essas ferramentas.
 - Exportar e importar backups em JSON para levar seus dados a outro navegador ou dispositivo.
+- Alternar toda a interface, o calendário e os relatórios entre português e inglês.
 
 Ao excluir uma tarefa, os blocos futuros associados são removidos; os blocos que já começaram são preservados como histórico.
 
@@ -27,7 +28,7 @@ Ao excluir uma tarefa, os blocos futuros associados são removidos; os blocos qu
 3. Arraste o bloco ou sua borda para reposicioná-lo e ajustar sua duração.
 4. A tarefa continua disponível na lista para você agendá-la novamente quando quiser.
 
-Use o menu de três pontos no canto superior direito para exportar um backup. Na importação, você pode escolher entre mesclar os dados com os existentes ou substituí-los.
+Na barra superior, use PT/EN para trocar o idioma e a engrenagem para abrir Configurações. Em **Backup do sistema**, você pode exportar uma cópia ou importar dados no modo mesclar ou substituir.
 
 ## Pré-requisitos
 

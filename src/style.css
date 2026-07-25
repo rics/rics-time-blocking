@@ -104,9 +104,9 @@ button:active {
 .global-nav {
   position: relative;
   z-index: 30;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 18px;
   min-width: 0;
   padding: 0 20px;
@@ -125,7 +125,8 @@ button:active {
   display: flex;
   align-self: stretch;
   align-items: center;
-  gap: 20px;
+  justify-content: flex-end;
+  gap: 9px;
 }
 
 .global-settings-button {
@@ -148,6 +149,10 @@ button:active {
 }
 
 .app-navigation-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   min-height: 100%;
   padding: 0 12px;
   border: 0;
@@ -159,6 +164,11 @@ button:active {
   cursor: pointer;
 }
 
+.app-navigation-link > i {
+  display: none;
+  font-size: 18px;
+}
+
 .app-navigation-link:hover {
   color: var(--accent-dark);
 }
@@ -166,6 +176,39 @@ button:active {
 .app-navigation-link.is-active {
   border-bottom-color: var(--accent);
   color: var(--accent-dark);
+}
+
+.language-switch {
+  display: flex;
+  align-self: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--canvas);
+}
+
+.language-switch button {
+  min-width: 34px;
+  padding: 6px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 820;
+  text-align: center;
+}
+
+.language-switch button:hover {
+  color: var(--accent-dark);
+}
+
+.language-switch button.is-active {
+  background: var(--surface);
+  color: var(--accent-dark);
+  box-shadow: 0 2px 7px rgba(16, 39, 31, 0.08);
 }
 
 .planning-screen {
@@ -2166,7 +2209,7 @@ button:active {
   }
 
   .global-nav-end {
-    gap: 12px;
+    gap: 7px;
   }
 
   .reports-screen,
@@ -2284,6 +2327,56 @@ button:active {
 @media (max-width: 650px) {
   .brand > span:last-child {
     display: none;
+  }
+
+  .global-nav {
+    gap: 6px;
+    padding-inline: 8px;
+  }
+
+  .global-nav-start {
+    min-width: 36px;
+  }
+
+  .app-navigation {
+    gap: 2px;
+  }
+
+  .app-navigation-link {
+    width: 38px;
+    min-height: 38px;
+    align-self: center;
+    padding: 0;
+    border-bottom: 0;
+    border-radius: var(--radius-sm);
+  }
+
+  .app-navigation-link > i {
+    display: block;
+  }
+
+  .app-navigation-link > span {
+    display: none;
+  }
+
+  .app-navigation-link.is-active {
+    background: var(--accent-soft);
+  }
+
+  .language-switch {
+    gap: 1px;
+    padding: 2px;
+  }
+
+  .language-switch button {
+    min-width: 27px;
+    padding-inline: 4px;
+  }
+
+  .global-settings-button {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
   }
 
   .text-button {
