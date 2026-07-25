@@ -229,7 +229,7 @@ export function createCalendar(container, callbacks = {}) {
           color: '#59675f'
         },
         weekend: {
-          backgroundColor: '#fafbfa'
+          backgroundColor: 'rgba(45, 106, 87, 0.025)'
         },
         today: {
           color: '#163d32'
