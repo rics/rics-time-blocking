@@ -7,20 +7,25 @@ import { exportBackup, importBackup } from './backup.js';
 import { createCalendar } from './calendar.js';
 import {
   addEvent,
+  addProject,
   addTask,
   countFutureEventsForTask,
   deleteEvent,
   deleteIntegration,
+  deleteProject,
   deleteTaskAndFutureEvents,
   getIntegration,
   getSetting,
   getTask,
   listEvents,
+  listProjects,
   listTasks,
   saveIntegration,
   setSetting,
   syncExternalTasks,
-  updateEvent
+  updateEvent,
+  updateProject,
+  updateTaskProject
 } from './db.js';
 import { fetchFizzyAccounts, fetchOpenFizzyCards } from './fizzy.js';
 import {
@@ -28,6 +33,11 @@ import {
   fetchTrelloSetup,
   trelloAuthorizationUrl
 } from './trello.js';
+import {
+  eventColorsForProject,
+  PROJECT_COLOR_PRESETS,
+  taskColorsForProject
+} from './project-colors.js';
 
 const DEFAULT_BLOCK_DURATION_MINUTES = 30;
 const TASK_SOURCES = {
@@ -116,14 +126,22 @@ app.innerHTML = `
 
       <button class="sidebar-scrim" id="sidebar-scrim" type="button" aria-label="Fechar tarefas"></button>
 
-      <aside class="task-sidebar" aria-labelledby="tasks-heading">
-        <div class="sidebar-header">
-          <h2 id="tasks-heading">Tarefas</h2>
+      <aside class="task-sidebar" aria-label="Tarefas e projetos">
+        <div class="sidebar-navigation">
+          <div class="sidebar-tabs" role="tablist" aria-label="Conteúdo da barra lateral">
+            <button class="sidebar-tab is-active" id="tasks-tab" type="button" role="tab" aria-selected="true" aria-controls="tasks-panel">
+              Tarefas
+            </button>
+            <button class="sidebar-tab" id="projects-tab" type="button" role="tab" aria-selected="false" aria-controls="projects-panel">
+              Projetos
+            </button>
+          </div>
           <button class="icon-button" id="sidebar-toggle" type="button" aria-label="Ocultar tarefas" title="Ocultar tarefas">
             <i class="ph ph-sidebar-simple" aria-hidden="true"></i>
           </button>
         </div>
 
+        <section class="sidebar-panel task-panel" id="tasks-panel" role="tabpanel" aria-labelledby="tasks-tab">
         <div class="task-search">
           <label class="sr-only" for="task-search">Buscar tarefas</label>
           <div class="task-search-row">
@@ -174,6 +192,21 @@ app.innerHTML = `
             </button>
           </div>
         </div>
+        </section>
+
+        <section class="sidebar-panel project-panel" id="projects-panel" role="tabpanel" aria-labelledby="projects-tab" hidden>
+          <div class="project-panel-header">
+            <div>
+              <p class="project-panel-kicker">Classificação</p>
+              <h3>Projetos</h3>
+            </div>
+            <button class="primary-icon-button" id="add-project-button" type="button" aria-label="Adicionar projeto" title="Adicionar projeto">
+              <i class="ph ph-plus" aria-hidden="true"></i>
+            </button>
+          </div>
+          <p class="project-panel-copy">Associe cada tarefa a um projeto para destacá-la com uma cor suave no calendário.</p>
+          <div id="project-list" class="project-list" aria-live="polite"></div>
+        </section>
       </aside>
     </main>
   </div>
@@ -217,6 +250,60 @@ app.innerHTML = `
         <button class="primary-button task-save-close" type="submit" data-save-mode="close">
           Salvar e sair
         </button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="project-dialog" class="app-dialog compact-dialog">
+    <form id="project-form">
+      <div class="dialog-heading">
+        <div>
+          <p class="dialog-kicker">Classificação</p>
+          <h2 id="project-dialog-title">Novo projeto</h2>
+        </div>
+        <button class="icon-button dialog-close" type="button" data-close-dialog aria-label="Fechar" title="Fechar">
+          <i class="ph ph-x" aria-hidden="true"></i>
+        </button>
+      </div>
+      <label class="field">
+        <span>Nome do projeto</span>
+        <input id="project-name" type="text" maxlength="80" autocomplete="off" placeholder="Ex.: Trabalho" required />
+      </label>
+      <label class="field project-color-field">
+        <span>Cor</span>
+        <span class="project-color-control">
+          <input id="project-color" type="color" value="#2D6A57" aria-label="Cor do projeto" />
+          <output id="project-color-value" for="project-color">#2D6A57</output>
+        </span>
+      </label>
+      <div class="project-color-presets" id="project-color-presets" aria-label="Cores sugeridas"></div>
+      <p id="project-form-status" class="task-form-status" role="status" aria-live="polite"></p>
+      <div class="dialog-actions">
+        <button class="secondary-button" type="button" data-close-dialog>Cancelar</button>
+        <button class="primary-button" type="submit">Salvar projeto</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="task-project-dialog" class="app-dialog compact-dialog">
+    <form id="task-project-form">
+      <div class="dialog-heading">
+        <div>
+          <p class="dialog-kicker">Projeto da tarefa</p>
+          <h2 id="task-project-dialog-title"></h2>
+        </div>
+        <button class="icon-button dialog-close" type="button" data-close-dialog aria-label="Fechar" title="Fechar">
+          <i class="ph ph-x" aria-hidden="true"></i>
+        </button>
+      </div>
+      <label class="field">
+        <span>Projeto</span>
+        <select id="task-project-dialog-select"></select>
+      </label>
+      <p id="task-project-form-status" class="task-form-status" role="status" aria-live="polite"></p>
+      <div class="dialog-actions">
+        <button class="secondary-button" type="button" data-close-dialog>Cancelar</button>
+        <button class="primary-button" id="save-task-project" type="submit">Salvar</button>
       </div>
     </form>
   </dialog>
@@ -437,12 +524,31 @@ const elements = {
   calendarPane: document.querySelector('.calendar-pane'),
   dropPreview: document.querySelector('#calendar-drop-preview'),
   dropPreviewTitle: document.querySelector('#calendar-drop-preview-title'),
+  tasksTab: document.querySelector('#tasks-tab'),
+  projectsTab: document.querySelector('#projects-tab'),
+  tasksPanel: document.querySelector('#tasks-panel'),
+  projectsPanel: document.querySelector('#projects-panel'),
   taskSearch: document.querySelector('#task-search'),
   addTaskButton: document.querySelector('#add-task-button'),
   taskDialog: document.querySelector('#task-dialog'),
   addTaskForm: document.querySelector('#add-task-form'),
   addTaskTitle: document.querySelector('#add-task-title'),
   addTaskStatus: document.querySelector('#add-task-status'),
+  addProjectButton: document.querySelector('#add-project-button'),
+  projectList: document.querySelector('#project-list'),
+  projectDialog: document.querySelector('#project-dialog'),
+  projectForm: document.querySelector('#project-form'),
+  projectDialogTitle: document.querySelector('#project-dialog-title'),
+  projectName: document.querySelector('#project-name'),
+  projectColor: document.querySelector('#project-color'),
+  projectColorValue: document.querySelector('#project-color-value'),
+  projectColorPresets: document.querySelector('#project-color-presets'),
+  projectFormStatus: document.querySelector('#project-form-status'),
+  taskProjectDialog: document.querySelector('#task-project-dialog'),
+  taskProjectForm: document.querySelector('#task-project-form'),
+  taskProjectDialogTitle: document.querySelector('#task-project-dialog-title'),
+  taskProjectSelect: document.querySelector('#task-project-dialog-select'),
+  taskProjectFormStatus: document.querySelector('#task-project-form-status'),
   taskList: document.querySelector('#task-list'),
   taskCount: document.querySelector('#task-count'),
   deleteDialog: document.querySelector('#delete-dialog'),
@@ -488,8 +594,12 @@ const elements = {
 
 const state = {
   tasks: [],
+  projects: [],
   taskQuery: '',
+  activeSidebarTab: 'tasks',
   selectedTaskId: null,
+  editingProjectId: null,
+  editingTaskId: null,
   pendingDeleteTask: null,
   pendingImportFile: null,
   calendar: null,
@@ -549,6 +659,140 @@ function filteredTasks() {
 function setTaskFormStatus(message = '', type = '') {
   elements.addTaskStatus.textContent = message;
   elements.addTaskStatus.dataset.type = type;
+}
+
+function setProjectFormStatus(message = '', type = '') {
+  elements.projectFormStatus.textContent = message;
+  elements.projectFormStatus.dataset.type = type;
+}
+
+function setSidebarTab(tab) {
+  state.activeSidebarTab = tab;
+  const projectsActive = tab === 'projects';
+  elements.tasksTab.classList.toggle('is-active', !projectsActive);
+  elements.tasksTab.setAttribute('aria-selected', String(!projectsActive));
+  elements.projectsTab.classList.toggle('is-active', projectsActive);
+  elements.projectsTab.setAttribute('aria-selected', String(projectsActive));
+  elements.tasksPanel.hidden = projectsActive;
+  elements.projectsPanel.hidden = !projectsActive;
+}
+
+function setProjectColor(color) {
+  elements.projectColor.value = color;
+  elements.projectColorValue.textContent = color.toUpperCase();
+  elements.projectColorPresets
+    .querySelectorAll('button')
+    .forEach((button) => button.classList.toggle('is-selected', button.dataset.color === color));
+}
+
+function renderProjectColorPresets() {
+  elements.projectColorPresets.replaceChildren();
+  for (const color of PROJECT_COLOR_PRESETS) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'project-color-preset';
+    button.dataset.color = color;
+    button.style.backgroundColor = color;
+    button.setAttribute('aria-label', `Usar a cor ${color}`);
+    button.title = color;
+    button.addEventListener('click', () => setProjectColor(color));
+    elements.projectColorPresets.append(button);
+  }
+}
+
+function openProjectDialog(project = null) {
+  state.editingProjectId = project?.id ?? null;
+  elements.projectDialogTitle.textContent = project ? 'Editar projeto' : 'Novo projeto';
+  elements.projectName.value = project?.name || '';
+  setProjectColor(project?.color || PROJECT_COLOR_PRESETS[0]);
+  setProjectFormStatus();
+  elements.projectDialog.showModal();
+  elements.projectName.focus();
+  elements.projectName.select();
+}
+
+function setTaskProjectFormStatus(message = '', type = '') {
+  elements.taskProjectFormStatus.textContent = message;
+  elements.taskProjectFormStatus.dataset.type = type;
+}
+
+function populateTaskProjectSelect(task) {
+  elements.taskProjectSelect.replaceChildren();
+  const noProject = document.createElement('option');
+  noProject.value = '';
+  noProject.textContent = 'Sem projeto';
+  noProject.selected = task?.projectId == null;
+  elements.taskProjectSelect.append(noProject);
+
+  for (const project of state.projects) {
+    const option = document.createElement('option');
+    option.value = String(project.id);
+    option.textContent = project.name;
+    option.selected = Number(task?.projectId) === Number(project.id);
+    elements.taskProjectSelect.append(option);
+  }
+}
+
+function openTaskProjectDialog(task) {
+  state.editingTaskId = task?.id ?? null;
+  elements.taskProjectDialogTitle.textContent = task?.title || 'Tarefa';
+  elements.taskProjectSelect.disabled = !task;
+  document.querySelector('#save-task-project').disabled = !task;
+  populateTaskProjectSelect(task);
+  setTaskProjectFormStatus(
+    task ? '' : 'A tarefa original não está mais disponível para edição.',
+    task ? '' : 'error'
+  );
+  elements.taskProjectDialog.showModal();
+}
+
+function renderProjects() {
+  elements.projectList.replaceChildren();
+
+  if (!state.projects.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty-state project-empty-state';
+    empty.innerHTML = `
+      <span class="empty-icon"><i class="ph ph-list-bullets" aria-hidden="true"></i></span>
+      <h3>Sem projetos ainda</h3>
+      <p>Crie um projeto para organizar tarefas e dar cor aos seus blocos.</p>
+    `;
+    elements.projectList.append(empty);
+    return;
+  }
+
+  for (const project of state.projects) {
+    const count = state.tasks.filter((task) => Number(task.projectId) === Number(project.id)).length;
+    const row = document.createElement('article');
+    row.className = 'project-row';
+    row.innerHTML = `
+      <span class="project-color-swatch" aria-hidden="true"></span>
+      <span class="project-row-copy"><strong></strong><small></small></span>
+      <button class="project-edit" type="button" aria-label="Editar projeto" title="Editar projeto"><i class="ph ph-gear-six" aria-hidden="true"></i></button>
+      <button class="project-delete" type="button" aria-label="Excluir projeto" title="Excluir projeto"><i class="ph ph-trash" aria-hidden="true"></i></button>
+    `;
+    row.querySelector('.project-color-swatch').style.backgroundColor = project.color;
+    row.querySelector('strong').textContent = project.name;
+    row.querySelector('small').textContent = count === 1 ? '1 tarefa' : `${count} tarefas`;
+    row.querySelector('.project-edit').addEventListener('click', () => openProjectDialog(project));
+    row.querySelector('.project-delete').addEventListener('click', async () => {
+      const confirmation = `Excluir o projeto “${project.name}”? As tarefas ficarão sem projeto.`;
+      if (!window.confirm(confirmation)) return;
+
+      try {
+        const result = await deleteProject(project.id);
+        await refreshData();
+        notify(
+          result.taskCount
+            ? 'Projeto excluído. As tarefas relacionadas ficaram sem projeto.'
+            : 'Projeto excluído.'
+        );
+      } catch (error) {
+        notify(error.message, 'error');
+      }
+    });
+    elements.projectList.append(row);
+  }
 }
 
 function openAddTaskDialog() {
@@ -1026,29 +1270,36 @@ function renderTasks() {
 
   for (const task of visibleTasks) {
     const source = TASK_SOURCES[task.source];
+    const project = state.projects.find((item) => Number(item.id) === Number(task.projectId));
+    const colors = taskColorsForProject(project);
     const row = document.createElement('article');
     row.className = 'task-row';
     row.draggable = true;
     row.dataset.taskId = String(task.id);
+    row.style.setProperty('--task-card-background', colors.backgroundColor);
+    row.style.setProperty('--task-card-border', colors.borderColor);
     row.innerHTML = `
       <button class="drag-handle" type="button" aria-label="Arrastar tarefa" title="Arraste para o calendário" tabindex="-1">
         <i class="ph ph-dots-six-vertical" aria-hidden="true"></i>
       </button>
       <div class="task-content">
-        <span class="task-title-line">
-          ${
-            source
-              ? `<img class="task-source-icon" src="${source.icon}" alt="" aria-hidden="true" title="${source.label}" /><span class="sr-only">${source.label}: </span>`
-              : ''
-          }
-          <span class="task-title"></span>
-        </span>
+        <div class="task-content-copy">
+          <span class="task-title-line">
+            ${
+              source
+                ? `<img class="task-source-icon" src="${source.icon}" alt="" aria-hidden="true" title="${source.label}" /><span class="sr-only">${source.label}: </span>`
+                : ''
+            }
+            <span class="task-title"></span>
+          </span>
+        </div>
       </div>
       <button class="task-delete" type="button" aria-label="Excluir tarefa" title="Excluir tarefa">
         <i class="ph ph-trash" aria-hidden="true"></i>
       </button>
     `;
     row.querySelector('.task-title').textContent = task.title;
+    row.querySelector('.task-content').addEventListener('click', () => openTaskProjectDialog(task));
     row.querySelector('.task-delete').addEventListener('click', () => openDeleteDialog(task));
     row.addEventListener('dragstart', (event) => {
       state.selectedTaskId = task.id;
@@ -1110,6 +1361,7 @@ async function createTaskBlock(taskId, { start, end }) {
 
   const record = await addEvent({
     taskId: task.id,
+    projectId: task.projectId,
     title: task.title,
     source: task.source,
     start: blockStart,
@@ -1119,7 +1371,8 @@ async function createTaskBlock(taskId, { start, end }) {
   });
 
   state.selectedTaskId = task.id;
-  state.calendar.addEvent(record);
+  const project = state.projects.find((item) => Number(item.id) === Number(task.projectId));
+  state.calendar.addEvent({ ...record, ...eventColorsForProject(project) });
   return record;
 }
 
@@ -1212,17 +1465,22 @@ function applyPreferences() {
 }
 
 async function refreshData() {
-  [state.tasks] = await Promise.all([listTasks()]);
+  [state.tasks, state.projects] = await Promise.all([listTasks(), listProjects()]);
   const events = await listEvents();
   const taskById = new Map(state.tasks.map((task) => [Number(task.id), task]));
+  const projectById = new Map(state.projects.map((project) => [Number(project.id), project]));
   const calendarEvents = events.map((event) => ({
     ...event,
-    source: event.source || taskById.get(Number(event.taskId))?.source
+    source: event.source || taskById.get(Number(event.taskId))?.source,
+    ...eventColorsForProject(
+      projectById.get(Number(event.projectId ?? taskById.get(Number(event.taskId))?.projectId))
+    )
   }));
   if (!state.tasks.some((task) => Number(task.id) === Number(state.selectedTaskId))) {
     state.selectedTaskId = state.tasks[0]?.id ?? null;
   }
   renderTasks();
+  renderProjects();
   await state.calendar.replaceEvents(calendarEvents);
   formatRangeTitle();
 }
@@ -1403,7 +1661,49 @@ function wireEvents() {
     renderTasks();
   });
 
+  elements.tasksTab.addEventListener('click', () => setSidebarTab('tasks'));
+  elements.projectsTab.addEventListener('click', () => setSidebarTab('projects'));
   elements.addTaskButton.addEventListener('click', openAddTaskDialog);
+  elements.addProjectButton.addEventListener('click', () => openProjectDialog());
+
+  elements.projectColor.addEventListener('input', () => setProjectColor(elements.projectColor.value));
+
+  elements.projectForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const values = {
+      name: elements.projectName.value,
+      color: elements.projectColor.value
+    };
+
+    try {
+      if (state.editingProjectId == null) {
+        await addProject(values.name, values.color);
+        notify('Projeto criado.');
+      } else {
+        await updateProject(state.editingProjectId, values);
+        notify('Projeto atualizado.');
+      }
+      closeDialog(elements.projectDialog);
+      await refreshData();
+    } catch (error) {
+      setProjectFormStatus(error.message, 'error');
+      elements.projectName.focus();
+    }
+  });
+
+  elements.taskProjectForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (state.editingTaskId == null) return;
+
+    try {
+      await updateTaskProject(state.editingTaskId, elements.taskProjectSelect.value || null);
+      closeDialog(elements.taskProjectDialog);
+      await refreshData();
+      notify('Projeto da tarefa atualizado.');
+    } catch (error) {
+      setTaskProjectFormStatus(error.message, 'error');
+    }
+  });
 
   elements.addTaskForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -1551,6 +1851,10 @@ async function init() {
     onRequestCreate() {
       state.calendar.clearSelection();
     },
+    async onRequestEventDetails(event) {
+      const task = Number.isFinite(event.taskId) ? await getTask(event.taskId) : null;
+      openTaskProjectDialog(task);
+    },
     async onUpdate(id, changes) {
       await updateEvent(id, changes);
       notify('Bloco atualizado.');
@@ -1573,6 +1877,7 @@ async function init() {
   });
 
   applyPreferences();
+  renderProjectColorPresets();
   wireEvents();
   renderFizzyConnection();
   renderTrelloConnection();

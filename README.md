@@ -14,6 +14,7 @@ Os dados ficam no seu próprio navegador. Não é necessário criar conta para u
 - Alternar entre as visões mensal, semanal, diária, de 2 semanas e de 3 semanas.
 - Ocultar ou estreitar os fins de semana.
 - Pesquisar tarefas e recolher a barra lateral quando precisar de mais espaço.
+- Criar projetos com cores e associar cada tarefa a um único projeto.
 - Importar cards em aberto do Fizzy ou Trello, caso queira conectar essas ferramentas.
 - Exportar e importar backups em JSON para levar seus dados a outro navegador ou dispositivo.
 
@@ -61,7 +62,7 @@ npm run preview
 
 ## Seus dados
 
-Tarefas, eventos e preferências são armazenados localmente no IndexedDB do navegador. Os backups são arquivos JSON portáteis. Credenciais usadas nas integrações com Fizzy e Trello ficam somente no navegador e não fazem parte do backup.
+Tarefas, projetos, eventos e preferências são armazenados localmente no IndexedDB do navegador. Os backups são arquivos JSON portáteis. Credenciais usadas nas integrações com Fizzy e Trello ficam somente no navegador e não fazem parte do backup.
 
 ---
 

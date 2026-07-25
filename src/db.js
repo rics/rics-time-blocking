@@ -15,8 +15,24 @@ db.version(2).stores({
   integrations: '&id'
 });
 
+db.version(3).stores({
+  tasks: '++id,title,createdAt,source,&externalKey,projectId',
+  events: '++id,taskId,title,start,end,calendarId,createdAt,projectId',
+  settings: '&key',
+  integrations: '&id',
+  projects: '++id,&name,createdAt'
+});
+
 function normalizeTitle(title) {
   return String(title ?? '').trim().replace(/\s+/g, ' ');
+}
+
+function normalizeColor(color) {
+  const value = String(color ?? '').trim();
+  if (!/^#[0-9a-f]{6}$/i.test(value)) {
+    throw new Error('Escolha uma cor válida para o projeto.');
+  }
+  return value.toUpperCase();
 }
 
 function belongsToTask(event, task) {
@@ -51,6 +67,7 @@ export async function addTask(title) {
 
   const task = {
     title: normalized,
+    projectId: null,
     createdAt: new Date().toISOString()
   };
 
@@ -89,12 +106,14 @@ export async function addTaskWithEvent(title, event) {
     const createdAt = new Date().toISOString();
     const task = {
       title: normalized,
+      projectId: null,
       createdAt
     };
     task.id = await db.tasks.add(task);
 
     const record = {
       taskId: task.id,
+      projectId: null,
       title: task.title,
       start: start.toISOString(),
       end: end.toISOString(),
@@ -150,9 +169,105 @@ export async function listEvents() {
   return db.events.toArray();
 }
 
+export async function listProjects() {
+  return db.projects.orderBy('createdAt').toArray();
+}
+
+export async function addProject(name, color) {
+  const normalizedName = normalizeTitle(name);
+
+  if (!normalizedName) {
+    throw new Error('Digite um nome para o projeto.');
+  }
+
+  const duplicate = await db.projects
+    .filter(
+      (project) =>
+        project.name.toLocaleLowerCase('pt-BR') === normalizedName.toLocaleLowerCase('pt-BR')
+    )
+    .first();
+
+  if (duplicate) {
+    throw new Error('Já existe um projeto com esse nome.');
+  }
+
+  const project = {
+    name: normalizedName,
+    color: normalizeColor(color),
+    createdAt: new Date().toISOString()
+  };
+  project.id = await db.projects.add(project);
+  return project;
+}
+
+export async function updateProject(id, { name, color }) {
+  const projectId = Number(id);
+  const current = await db.projects.get(projectId);
+  if (!current) throw new Error('O projeto selecionado não existe mais.');
+
+  const normalizedName = normalizeTitle(name);
+  if (!normalizedName) throw new Error('Digite um nome para o projeto.');
+
+  const duplicate = await db.projects
+    .filter(
+      (project) =>
+        Number(project.id) !== projectId &&
+        project.name.toLocaleLowerCase('pt-BR') === normalizedName.toLocaleLowerCase('pt-BR')
+    )
+    .first();
+
+  if (duplicate) throw new Error('Já existe um projeto com esse nome.');
+
+  await db.projects.update(projectId, {
+    name: normalizedName,
+    color: normalizeColor(color)
+  });
+  return db.projects.get(projectId);
+}
+
+export async function deleteProject(id) {
+  const projectId = Number(id);
+
+  return db.transaction('rw', db.projects, db.tasks, db.events, async () => {
+    const project = await db.projects.get(projectId);
+    if (!project) throw new Error('O projeto selecionado não existe mais.');
+
+    const [tasks, events] = await Promise.all([
+      db.tasks.filter((task) => Number(task.projectId) === projectId).toArray(),
+      db.events.filter((event) => Number(event.projectId) === projectId).toArray()
+    ]);
+
+    await Promise.all([
+      ...tasks.map((task) => db.tasks.update(task.id, { projectId: null })),
+      ...events.map((event) => db.events.update(event.id, { projectId: null }))
+    ]);
+    await db.projects.delete(projectId);
+    return { project, taskCount: tasks.length };
+  });
+}
+
+export async function updateTaskProject(taskId, projectId) {
+  const id = Number(taskId);
+  const task = await db.tasks.get(id);
+  if (!task) throw new Error('A tarefa selecionada não existe mais.');
+
+  const normalizedProjectId = projectId == null || projectId === '' ? null : Number(projectId);
+  if (normalizedProjectId != null) {
+    const project = await db.projects.get(normalizedProjectId);
+    if (!project) throw new Error('O projeto selecionado não existe mais.');
+  }
+
+  await db.tasks.update(id, { projectId: normalizedProjectId });
+  await db.events
+    .filter((event) => Number(event.taskId) === id)
+    .modify({ projectId: normalizedProjectId });
+  return db.tasks.get(id);
+}
+
 export async function addEvent(event) {
   const record = {
     taskId: Number(event.taskId),
+    projectId: event.projectId == null ? null : Number(event.projectId),
     title: normalizeTitle(event.title),
     start: new Date(event.start).toISOString(),
     end: new Date(event.end).toISOString(),
@@ -341,11 +456,12 @@ export async function syncExternalTasks(source, externalTasks) {
 }
 
 export async function getAllData() {
-  const [tasks, events, settings] = await Promise.all([
+  const [tasks, events, settings, projects] = await Promise.all([
     db.tasks.toArray(),
     db.events.toArray(),
-    db.settings.toArray()
+    db.settings.toArray(),
+    db.projects.toArray()
   ]);
 
-  return { tasks, events, settings };
+  return { tasks, events, settings, projects };
 }

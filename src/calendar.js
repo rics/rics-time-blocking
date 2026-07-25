@@ -32,6 +32,9 @@ function toCalendarEvent(event) {
     title: event.title,
     start: event.start,
     end: event.end,
+    backgroundColor: event.backgroundColor,
+    borderColor: event.borderColor,
+    color: event.color,
     isAllday: Boolean(event.isAllDay),
     category: event.category || (event.isAllDay ? 'allday' : 'time'),
     raw: {
@@ -109,7 +112,7 @@ export function createCalendar(container, callbacks = {}) {
     defaultView: 'week',
     usageStatistics: false,
     useFormPopup: false,
-    useDetailPopup: true,
+    useDetailPopup: false,
     gridSelection: {
       enableClick: false,
       enableDbClick: false
@@ -306,6 +309,16 @@ export function createCalendar(container, callbacks = {}) {
     } catch (error) {
       callbacks.onError?.(error);
     }
+  });
+
+  calendar.on('clickEvent', ({ event }) => {
+    callbacks.onRequestEventDetails?.({
+      id: Number(event.id),
+      taskId: Number(event.raw?.taskId),
+      title: event.title,
+      start: toDate(event.start),
+      end: toDate(event.end)
+    });
   });
 
   calendar.on('clickDayName', ({ date }) => {

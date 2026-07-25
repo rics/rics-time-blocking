@@ -1,8 +1,8 @@
 import { db, getAllData } from './db.js';
 
 const BACKUP_FORMAT = 'bloco-backup';
-const BACKUP_VERSION = 2;
-const SUPPORTED_BACKUP_VERSIONS = new Set([1, BACKUP_VERSION]);
+const BACKUP_VERSION = 3;
+const SUPPORTED_BACKUP_VERSIONS = new Set([1, 2, BACKUP_VERSION]);
 
 function isValidDate(value) {
   return typeof value === 'string' && Number.isFinite(new Date(value).getTime());
@@ -18,6 +18,10 @@ function validateBackup(data) {
   }
 
   if (!Array.isArray(data.tasks) || !Array.isArray(data.events) || !Array.isArray(data.settings)) {
+    throw new Error('O backup está incompleto.');
+  }
+
+  if (data.version === BACKUP_VERSION && !Array.isArray(data.projects)) {
     throw new Error('O backup está incompleto.');
   }
 
@@ -45,11 +49,20 @@ function validateBackup(data) {
     (setting) => typeof setting?.key === 'string' && 'value' in setting
   );
 
-  if (!tasksAreValid || !eventsAreValid || !settingsAreValid) {
+  const projects = Array.isArray(data.projects) ? data.projects : [];
+  const projectsAreValid = projects.every(
+    (project) =>
+      Number.isInteger(Number(project.id)) &&
+      typeof project.name === 'string' &&
+      project.name.trim().length > 0 &&
+      /^#[0-9a-f]{6}$/i.test(project.color)
+  );
+
+  if (!tasksAreValid || !eventsAreValid || !settingsAreValid || !projectsAreValid) {
     throw new Error('O backup contém registros inválidos.');
   }
 
-  return data;
+  return { ...data, projects };
 }
 
 export async function exportBackup() {
@@ -90,19 +103,26 @@ export async function importBackup(file, mode = 'merge') {
 
   const data = validateBackup(parsed);
 
-  await db.transaction('rw', db.tasks, db.events, db.settings, async () => {
+  await db.transaction('rw', db.tasks, db.events, db.settings, db.projects, async () => {
     if (mode === 'replace') {
-      await Promise.all([db.tasks.clear(), db.events.clear(), db.settings.clear()]);
+      await Promise.all([
+        db.tasks.clear(),
+        db.events.clear(),
+        db.settings.clear(),
+        db.projects.clear()
+      ]);
     }
 
     await db.tasks.bulkPut(data.tasks);
     await db.events.bulkPut(data.events);
     await db.settings.bulkPut(data.settings);
+    await db.projects.bulkPut(data.projects);
   });
 
   return {
     taskCount: data.tasks.length,
     eventCount: data.events.length,
+    projectCount: data.projects.length,
     mode
   };
 }

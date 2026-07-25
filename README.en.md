@@ -14,6 +14,7 @@ Your data stays in your own browser. No account is required, and tasks, blocks, 
 - Switch between month, week, day, two-week, and three-week views.
 - Hide or narrow weekends.
 - Search tasks and collapse the sidebar when you need more space.
+- Create color-coded projects and associate each task with one project.
 - Import open cards from Fizzy or Trello if you choose to connect those tools.
 - Export and import JSON backups to move your data between browsers or devices.
 
@@ -61,7 +62,7 @@ npm run preview
 
 ## Your data
 
-Tasks, events, and preferences are stored locally in your browser's IndexedDB. Backups are portable JSON files. Credentials used for Fizzy and Trello integrations stay only in the browser and are not included in backups.
+Tasks, projects, events, and preferences are stored locally in your browser's IndexedDB. Backups are portable JSON files. Credentials used for Fizzy and Trello integrations stay only in the browser and are not included in backups.
 
 ---
 
