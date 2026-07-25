@@ -1,7 +1,7 @@
 const UNASSIGNED_EVENT_COLORS = {
-  backgroundColor: '#eef2ef',
-  borderColor: '#d7dfda',
-  color: '#33433b'
+  backgroundColor: '#F2F2F2',
+  borderColor: '#D0D0D0',
+  color: '#303030'
 };
 
 function hexToRgb(hex) {
