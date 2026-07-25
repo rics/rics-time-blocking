@@ -38,6 +38,12 @@ import {
   PROJECT_COLOR_PRESETS,
   taskColorsForProject
 } from './project-colors.js';
+import {
+  formatHours,
+  generateReport,
+  REPORT_UNASSIGNED_PROJECT,
+  reportCsv
+} from './reports.js';
 
 const DEFAULT_BLOCK_DURATION_MINUTES = 30;
 const TASK_SOURCES = {
@@ -54,12 +60,21 @@ const TASK_SOURCES = {
 const app = document.querySelector('#app');
 
 app.innerHTML = `
-  <div class="app-shell" data-sidebar="visible">
-    <header class="topbar">
+  <div class="app-shell" data-sidebar="visible" data-screen="planning">
+    <header class="global-nav">
       <div class="brand" aria-label="Rics Time-blocking">
         <span class="brand-mark" aria-hidden="true"><span></span></span>
         <span>Rics Time-blocking</span>
       </div>
+
+      <nav class="app-navigation" aria-label="Navegação principal">
+        <button class="app-navigation-link is-active" id="planning-navigation" type="button" aria-current="page">Planejamento</button>
+        <button class="app-navigation-link" id="reports-navigation" type="button">Relatórios</button>
+      </nav>
+    </header>
+
+    <section class="planning-screen" aria-label="Planejamento">
+    <header class="topbar">
 
       <nav class="date-navigation" aria-label="Navegação do calendário">
         <button class="icon-button" id="previous-range" type="button" aria-label="Período anterior" title="Período anterior">
@@ -209,6 +224,78 @@ app.innerHTML = `
         </section>
       </aside>
     </main>
+    </section>
+
+    <section class="reports-screen" id="reports-screen" aria-labelledby="reports-heading" hidden>
+      <header class="reports-screen-heading">
+        <div>
+          <p class="dialog-kicker">Análise de tempo</p>
+          <h1 id="reports-heading">Relatórios</h1>
+          <p>Escolha um período e os projetos para consolidar os blocos planejados.</p>
+        </div>
+      </header>
+
+      <div class="reports-layout">
+        <form class="report-filters" id="report-form">
+          <div class="report-filter-heading">
+            <h2>Parâmetros</h2>
+            <span>Obrigatórios</span>
+          </div>
+
+          <div class="report-date-fields">
+            <label class="field">
+              <span>Data inicial</span>
+              <input id="report-start-date" type="date" required />
+            </label>
+            <label class="field">
+              <span>Data final</span>
+              <input id="report-end-date" type="date" required />
+            </label>
+          </div>
+
+          <fieldset class="report-project-filter">
+            <legend>Projetos</legend>
+            <p>Escolha um ou mais projetos para incluir.</p>
+            <div id="report-project-options" class="report-project-options"></div>
+          </fieldset>
+
+          <fieldset class="report-mode-filter">
+            <legend>Formato</legend>
+            <label class="report-radio-option">
+              <input type="radio" name="report-mode" value="grouped" checked />
+              <span><strong>Agrupado por tarefa</strong><small>Soma todas as horas de cada tarefa.</small></span>
+            </label>
+            <label class="report-radio-option">
+              <input type="radio" name="report-mode" value="detailed" />
+              <span><strong>Detalhado</strong><small>Mostra cada período trabalhado em uma linha.</small></span>
+            </label>
+          </fieldset>
+
+          <p id="report-form-status" class="report-form-status" role="status"></p>
+          <button class="primary-button report-generate-button" id="report-generate-button" type="submit" disabled>Gerar relatório</button>
+        </form>
+
+        <section class="report-results" aria-live="polite">
+          <div class="report-results-heading">
+            <div>
+              <h2>Resultado</h2>
+              <p id="report-results-summary">Defina os parâmetros para gerar um relatório.</p>
+            </div>
+            <button class="secondary-button" id="report-export-button" type="button" disabled>
+              <i class="ph ph-download-simple" aria-hidden="true"></i>
+              Exportar CSV
+            </button>
+          </div>
+          <div id="report-results-content" class="report-results-content">
+            <div class="report-empty-state">
+              <i class="ph ph-hard-drives" aria-hidden="true"></i>
+              <h3>Nenhum relatório gerado</h3>
+              <p>Os resultados aparecerão aqui e só existem enquanto esta tela estiver aberta.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
   </div>
 
   <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
@@ -518,6 +605,18 @@ app.innerHTML = `
 
 const elements = {
   shell: document.querySelector('.app-shell'),
+  planningNavigation: document.querySelector('#planning-navigation'),
+  reportsNavigation: document.querySelector('#reports-navigation'),
+  reportsScreen: document.querySelector('#reports-screen'),
+  reportForm: document.querySelector('#report-form'),
+  reportStartDate: document.querySelector('#report-start-date'),
+  reportEndDate: document.querySelector('#report-end-date'),
+  reportProjectOptions: document.querySelector('#report-project-options'),
+  reportFormStatus: document.querySelector('#report-form-status'),
+  reportGenerateButton: document.querySelector('#report-generate-button'),
+  reportResultsSummary: document.querySelector('#report-results-summary'),
+  reportResultsContent: document.querySelector('#report-results-content'),
+  reportExportButton: document.querySelector('#report-export-button'),
   rangeTitle: document.querySelector('#range-title'),
   viewSelect: document.querySelector('#view-select'),
   calendar: document.querySelector('#calendar'),
@@ -600,6 +699,11 @@ const state = {
   selectedTaskId: null,
   editingProjectId: null,
   editingTaskId: null,
+  report: {
+    rows: [],
+    mode: 'grouped',
+    generated: false
+  },
   pendingDeleteTask: null,
   pendingImportFile: null,
   calendar: null,
@@ -1503,7 +1607,223 @@ async function setWeekendPreference(key, value) {
   });
 }
 
+function selectedReportProjectIds() {
+  return Array.from(
+    elements.reportProjectOptions.querySelectorAll('input[type="checkbox"]:checked'),
+    (input) => input.value
+  );
+}
+
+function setReportFormStatus(message = '', type = '') {
+  elements.reportFormStatus.textContent = message;
+  elements.reportFormStatus.dataset.type = type;
+}
+
+function clearReportOutput() {
+  state.report = { rows: [], mode: 'grouped', generated: false };
+  elements.reportExportButton.disabled = true;
+  elements.reportResultsSummary.textContent = 'Defina os parâmetros para gerar um relatório.';
+  elements.reportResultsContent.replaceChildren();
+  const empty = document.createElement('div');
+  empty.className = 'report-empty-state';
+  empty.innerHTML = `
+    <i class="ph ph-hard-drives" aria-hidden="true"></i>
+    <h3>Nenhum relatório gerado</h3>
+    <p>Os resultados aparecerão aqui e só existem enquanto esta tela estiver aberta.</p>
+  `;
+  elements.reportResultsContent.append(empty);
+}
+
+function renderReportProjectOptions() {
+  elements.reportProjectOptions.replaceChildren();
+  const options = [
+    { id: REPORT_UNASSIGNED_PROJECT, name: 'Sem projeto', color: '#A0A0A0' },
+    ...state.projects.map((project) => ({ id: String(project.id), name: project.name, color: project.color }))
+  ];
+
+  for (const option of options) {
+    const label = document.createElement('label');
+    label.className = 'report-project-option';
+    label.innerHTML = `
+      <input type="checkbox" />
+      <span class="report-project-color" aria-hidden="true"></span>
+      <span></span>
+    `;
+    const input = label.querySelector('input');
+    input.value = option.id;
+    input.addEventListener('change', () => {
+      clearReportOutput();
+      updateReportFormState();
+    });
+    label.querySelector('.report-project-color').style.backgroundColor = option.color;
+    label.querySelector('span:last-child').textContent = option.name;
+    elements.reportProjectOptions.append(label);
+  }
+}
+
+function reportMode() {
+  return document.querySelector('input[name="report-mode"]:checked')?.value || 'grouped';
+}
+
+function updateReportFormState() {
+  const start = elements.reportStartDate.value;
+  const end = elements.reportEndDate.value;
+  const hasProjects = selectedReportProjectIds().length > 0;
+  const validRange = Boolean(start && end && start <= end);
+  elements.reportGenerateButton.disabled = !validRange || !hasProjects;
+
+  if (end && start && end < start) {
+    setReportFormStatus('A data final deve ser igual ou posterior à data inicial.', 'error');
+  } else if (start && end && !hasProjects) {
+    setReportFormStatus('Escolha ao menos um projeto.', 'error');
+  } else {
+    setReportFormStatus();
+  }
+}
+
+function renderReportRows(rows, mode) {
+  elements.reportResultsContent.replaceChildren();
+  const totalHours = rows.reduce((total, row) => total + row.hours, 0);
+  elements.reportResultsSummary.textContent = rows.length
+    ? `${rows.length} ${rows.length === 1 ? 'linha' : 'linhas'} · ${formatHours(totalHours)}`
+    : 'Nenhum bloco encontrado para os filtros escolhidos.';
+  elements.reportExportButton.disabled = rows.length === 0;
+
+  if (!rows.length) {
+    const empty = document.createElement('div');
+    empty.className = 'report-empty-state';
+    empty.innerHTML = `
+      <i class="ph ph-magnifying-glass" aria-hidden="true"></i>
+      <h3>Sem resultados neste período</h3>
+      <p>Tente ajustar o intervalo ou os projetos selecionados.</p>
+    `;
+    elements.reportResultsContent.append(empty);
+    return;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'report-table';
+  const headings = mode === 'detailed'
+    ? ['Tarefa', 'Data', 'Início', 'Fim', 'Horas']
+    : ['Tarefa', 'Total de horas'];
+  const head = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  headings.forEach((heading) => {
+    const cell = document.createElement('th');
+    cell.textContent = heading;
+    headRow.append(cell);
+  });
+  head.append(headRow);
+  const body = document.createElement('tbody');
+
+  for (const row of rows) {
+    const tableRow = document.createElement('tr');
+    const values = mode === 'detailed'
+      ? [row.taskTitle, row.date.split('-').reverse().join('/'), row.start, row.end, formatHours(row.hours)]
+      : [row.taskTitle, formatHours(row.hours)];
+    values.forEach((value) => {
+      const cell = document.createElement('td');
+      cell.textContent = value;
+      tableRow.append(cell);
+    });
+    body.append(tableRow);
+  }
+
+  table.append(head, body);
+  elements.reportResultsContent.append(table);
+}
+
+function resetReportScreen() {
+  elements.reportStartDate.value = '';
+  elements.reportEndDate.value = '';
+  renderReportProjectOptions();
+  clearReportOutput();
+  updateReportFormState();
+}
+
+function setActiveScreen(screen) {
+  const reports = screen === 'reports';
+  elements.shell.dataset.screen = screen;
+  elements.reportsScreen.hidden = !reports;
+  elements.planningNavigation.classList.toggle('is-active', !reports);
+  elements.planningNavigation.toggleAttribute('aria-current', !reports);
+  elements.reportsNavigation.classList.toggle('is-active', reports);
+  elements.reportsNavigation.toggleAttribute('aria-current', reports);
+
+  if (reports) {
+    elements.reportsScreen.scrollTop = 0;
+    resetReportScreen();
+  } else {
+    clearReportOutput();
+    window.requestAnimationFrame(() => state.calendar?.render());
+  }
+}
+
+async function generateCurrentReport() {
+  const mode = reportMode();
+  const events = await listEvents();
+  const rows = generateReport({
+    events,
+    tasks: state.tasks,
+    selectedProjectIds: selectedReportProjectIds(),
+    startDate: elements.reportStartDate.value,
+    endDate: elements.reportEndDate.value,
+    mode
+  });
+
+  state.report = {
+    rows,
+    mode,
+    generated: true,
+    startDate: elements.reportStartDate.value,
+    endDate: elements.reportEndDate.value
+  };
+  renderReportRows(rows, mode);
+}
+
+function exportCurrentReport() {
+  if (!state.report.generated || !state.report.rows.length) return;
+  const blob = new Blob([reportCsv(state.report)], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const type = state.report.mode === 'detailed' ? 'detalhado' : 'agrupado';
+  link.href = url;
+  link.download = `rics-time-blocking-relatorio-${type}-${state.report.startDate}-a-${state.report.endDate}.csv`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function wireEvents() {
+  elements.planningNavigation.addEventListener('click', () => setActiveScreen('planning'));
+  elements.reportsNavigation.addEventListener('click', () => setActiveScreen('reports'));
+
+  [elements.reportStartDate, elements.reportEndDate].forEach((input) => {
+    input.addEventListener('change', () => {
+      clearReportOutput();
+      updateReportFormState();
+    });
+  });
+
+  document.querySelectorAll('input[name="report-mode"]').forEach((input) => {
+    input.addEventListener('change', () => {
+      clearReportOutput();
+      updateReportFormState();
+    });
+  });
+
+  elements.reportForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (elements.reportGenerateButton.disabled) return;
+    try {
+      await generateCurrentReport();
+    } catch (error) {
+      setReportFormStatus(error.message || 'Não foi possível gerar o relatório.', 'error');
+    }
+  });
+  elements.reportExportButton.addEventListener('click', exportCurrentReport);
+
   document.querySelector('#previous-range').addEventListener('click', () => state.calendar.move(-1));
   document.querySelector('#next-range').addEventListener('click', () => state.calendar.move(1));
   document.querySelector('#today-button').addEventListener('click', () => state.calendar.today());
