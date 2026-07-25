@@ -9,14 +9,17 @@ import {
   addEvent,
   addProject,
   addTask,
+  countHistoricalEvents,
   deleteEvent,
+  deleteHistoricalEvents,
   deleteIntegration,
   deleteProject,
   deleteTaskAndFutureEvents,
+  getDatabaseStats,
   getIntegration,
   getSetting,
   getTask,
-  listEvents,
+  listEventsInRange,
   listProjects,
   listTasks,
   prepareDatabase,
@@ -48,6 +51,7 @@ import {
 } from './reports.js';
 
 const DEFAULT_BLOCK_DURATION_MINUTES = 30;
+const CALENDAR_RANGE_MARGIN_DAYS = 7;
 const TASK_SOURCES = {
   fizzy: {
     label: 'Fizzy',
@@ -285,6 +289,46 @@ app.innerHTML = `
       </header>
 
       <div class="settings-layout">
+        <section class="settings-section settings-storage-section">
+          <div class="settings-section-heading">
+            <span class="settings-section-icon" aria-hidden="true">
+              <i class="ph ph-clock-counter-clockwise"></i>
+            </span>
+            <div>
+              <h2>Armazenamento local</h2>
+              <p>Acompanhe o histórico salvo somente neste navegador.</p>
+            </div>
+          </div>
+          <dl class="storage-stats" aria-live="polite">
+            <div>
+              <dt>Tarefas</dt>
+              <dd id="storage-task-count">—</dd>
+            </div>
+            <div>
+              <dt>Blocos</dt>
+              <dd id="storage-event-count">—</dd>
+            </div>
+            <div>
+              <dt>Bloco mais antigo</dt>
+              <dd id="storage-oldest-event">—</dd>
+            </div>
+            <div>
+              <dt>Bloco mais recente</dt>
+              <dd id="storage-newest-event">—</dd>
+            </div>
+            <div class="storage-usage-stat">
+              <dt>Uso estimado deste site</dt>
+              <dd id="storage-estimated-usage">—</dd>
+            </div>
+          </dl>
+          <div class="settings-actions">
+            <button class="secondary-button" id="manage-history-button" type="button">
+              <i class="ph ph-clock-counter-clockwise" aria-hidden="true"></i>
+              Gerenciar histórico
+            </button>
+          </div>
+        </section>
+
         <section class="settings-section">
           <div class="settings-section-heading">
             <span class="settings-section-icon" aria-hidden="true">
@@ -482,6 +526,53 @@ app.innerHTML = `
       <button class="secondary-button" type="button" data-close-dialog>Cancelar</button>
       <button class="danger-button" id="confirm-reset-database" type="button">
         Sim, apagar tudo
+      </button>
+    </div>
+  </dialog>
+
+  <dialog id="history-dialog" class="app-dialog history-dialog" aria-labelledby="history-dialog-title">
+    <div class="dialog-heading">
+      <div>
+        <p class="dialog-kicker">Armazenamento local</p>
+        <h2 id="history-dialog-title">Gerenciar histórico</h2>
+      </div>
+      <button class="icon-button dialog-close" type="button" data-close-dialog aria-label="Fechar" title="Fechar">
+        <i class="ph ph-x" aria-hidden="true"></i>
+      </button>
+    </div>
+    <p class="dialog-copy">
+      Exclua apenas blocos encerrados antes da data escolhida. Tarefas, projetos,
+      preferências, conexões e blocos posteriores serão preservados.
+    </p>
+    <div class="history-presets" aria-label="Atalhos de período">
+      <button class="secondary-button" type="button" data-history-months="6">Manter 6 meses</button>
+      <button class="secondary-button" type="button" data-history-months="12">Manter 1 ano</button>
+      <button class="secondary-button" type="button" data-history-months="24">Manter 2 anos</button>
+    </div>
+    <label class="field">
+      <span>Excluir blocos encerrados antes de</span>
+      <input id="history-cutoff" type="date" />
+    </label>
+    <div id="history-preview" class="history-preview" role="status" aria-live="polite">
+      Escolha uma data para calcular a prévia.
+    </div>
+    <div class="reset-warning history-warning">
+      <i class="ph ph-warning-circle" aria-hidden="true"></i>
+      <p>Os relatórios do período apagado não poderão mais ser gerados sem restaurar um backup.</p>
+    </div>
+    <label class="history-confirmation">
+      <input id="history-confirmation" type="checkbox" />
+      <span>Entendo que os blocos selecionados serão excluídos deste navegador.</span>
+    </label>
+    <div class="dialog-actions history-dialog-actions">
+      <button class="secondary-button" id="history-export-button" type="button">
+        <i class="ph ph-download-simple" aria-hidden="true"></i>
+        Exportar backup
+      </button>
+      <span class="dialog-action-spacer"></span>
+      <button class="secondary-button" type="button" data-close-dialog>Cancelar</button>
+      <button class="danger-button" id="confirm-history-cleanup" type="button" disabled>
+        Excluir histórico
       </button>
     </div>
   </dialog>
@@ -726,6 +817,18 @@ const elements = {
   removeTaskOrEvent: document.querySelector('#remove-task-or-event'),
   taskList: document.querySelector('#task-list'),
   taskCount: document.querySelector('#task-count'),
+  storageTaskCount: document.querySelector('#storage-task-count'),
+  storageEventCount: document.querySelector('#storage-event-count'),
+  storageOldestEvent: document.querySelector('#storage-oldest-event'),
+  storageNewestEvent: document.querySelector('#storage-newest-event'),
+  storageEstimatedUsage: document.querySelector('#storage-estimated-usage'),
+  manageHistoryButton: document.querySelector('#manage-history-button'),
+  historyDialog: document.querySelector('#history-dialog'),
+  historyCutoff: document.querySelector('#history-cutoff'),
+  historyPreview: document.querySelector('#history-preview'),
+  historyConfirmation: document.querySelector('#history-confirmation'),
+  historyExportButton: document.querySelector('#history-export-button'),
+  confirmHistoryCleanup: document.querySelector('#confirm-history-cleanup'),
   resetDatabaseDialog: document.querySelector('#reset-database-dialog'),
   resetDatabaseButton: document.querySelector('#reset-database-button'),
   confirmResetDatabase: document.querySelector('#confirm-reset-database'),
@@ -773,6 +876,11 @@ const state = {
   editingProjectId: null,
   editingTaskId: null,
   editingEventId: null,
+  calendarEventsRequestId: 0,
+  historyPreviewRequestId: 0,
+  historyEligibleCount: 0,
+  initialized: false,
+  suspendCalendarRangeLoading: false,
   report: {
     rows: [],
     mode: 'grouped',
@@ -818,6 +926,78 @@ function notify(message, type = 'success') {
 
 function taskCountLabel(count) {
   return count === 1 ? '1 tarefa' : `${count} tarefas`;
+}
+
+function addLocalDays(value, amount) {
+  const date = new Date(value);
+  date.setDate(date.getDate() + amount);
+  return date;
+}
+
+function dateFromInput(value) {
+  const [year, month, day] = String(value).split('-').map(Number);
+  const date = new Date(year, month - 1, day, 0, 0, 0, 0);
+  if (
+    !year ||
+    !month ||
+    !day ||
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  return date;
+}
+
+function dateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function historyCutoffFromInput() {
+  const cutoff = dateFromInput(elements.historyCutoff.value);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return cutoff && cutoff <= today ? cutoff : null;
+}
+
+function monthsAgo(months) {
+  const today = new Date();
+  const day = today.getDate();
+  const target = new Date(today.getFullYear(), today.getMonth() - months, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(day, lastDay));
+  target.setHours(0, 0, 0, 0);
+  return target;
+}
+
+function formatStoredDate(value) {
+  if (!value) return 'Sem histórico';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return 'Data indisponível';
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  }).format(date);
+}
+
+function formatStorageSize(bytes) {
+  if (!Number.isFinite(bytes)) return 'Não disponível';
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1024;
+  let unit = units[0];
+  for (let index = 1; index < units.length && value >= 1024; index += 1) {
+    value /= 1024;
+    unit = units[index];
+  }
+  return `${new Intl.NumberFormat('pt-BR', {
+    maximumFractionDigits: value < 10 ? 1 : 0
+  }).format(value)} ${unit}`;
 }
 
 function normalizeSearch(value) {
@@ -1656,6 +1836,70 @@ function closeDialog(dialog) {
   if (dialog?.open) dialog.close();
 }
 
+async function refreshDatabaseStats() {
+  const [stats, storageEstimate] = await Promise.all([
+    getDatabaseStats(),
+    navigator.storage?.estimate?.().catch(() => null) ?? null
+  ]);
+  elements.storageTaskCount.textContent = new Intl.NumberFormat('pt-BR').format(stats.taskCount);
+  elements.storageEventCount.textContent = new Intl.NumberFormat('pt-BR').format(stats.eventCount);
+  elements.storageOldestEvent.textContent = formatStoredDate(stats.oldestEventStart);
+  elements.storageNewestEvent.textContent = formatStoredDate(stats.newestEventEnd);
+  elements.storageEstimatedUsage.textContent = formatStorageSize(storageEstimate?.usage);
+  elements.manageHistoryButton.disabled = stats.eventCount === 0;
+}
+
+function updateHistoryCleanupButton() {
+  elements.confirmHistoryCleanup.disabled =
+    state.historyEligibleCount === 0 || !elements.historyConfirmation.checked;
+}
+
+async function updateHistoryPreview() {
+  const requestId = ++state.historyPreviewRequestId;
+  const cutoff = historyCutoffFromInput();
+  state.historyEligibleCount = 0;
+  elements.historyConfirmation.checked = false;
+  updateHistoryCleanupButton();
+
+  if (!cutoff) {
+    elements.historyPreview.textContent =
+      'Escolha hoje ou uma data anterior para calcular a prévia.';
+    elements.historyPreview.dataset.type = 'error';
+    return;
+  }
+
+  elements.historyPreview.textContent = 'Calculando blocos elegíveis…';
+  elements.historyPreview.dataset.type = '';
+
+  try {
+    const count = await countHistoricalEvents(cutoff);
+    if (requestId !== state.historyPreviewRequestId) return;
+    state.historyEligibleCount = count;
+    elements.historyPreview.textContent = count
+      ? `${new Intl.NumberFormat('pt-BR').format(count)} ${
+          count === 1 ? 'bloco será excluído' : 'blocos serão excluídos'
+        }.`
+      : 'Nenhum bloco será excluído com esta data.';
+    elements.historyPreview.dataset.type = count ? 'warning' : '';
+    updateHistoryCleanupButton();
+  } catch (error) {
+    if (requestId !== state.historyPreviewRequestId) return;
+    elements.historyPreview.textContent =
+      error.message || 'Não foi possível calcular a prévia.';
+    elements.historyPreview.dataset.type = 'error';
+  }
+}
+
+function openHistoryDialog() {
+  const today = new Date();
+  elements.historyCutoff.max = dateInputValue(today);
+  elements.historyCutoff.value = dateInputValue(monthsAgo(24));
+  state.historyEligibleCount = 0;
+  elements.historyConfirmation.checked = false;
+  elements.historyDialog.showModal();
+  updateHistoryPreview();
+}
+
 function formatRangeTitle() {
   if (!state.calendar) return;
 
@@ -1709,6 +1953,7 @@ async function loadPreferences() {
 }
 
 function applyPreferences() {
+  state.suspendCalendarRangeLoading = true;
   elements.viewSelect.value = state.preferences.view;
   elements.shell.dataset.view = state.preferences.view;
   elements.narrowWeekends.setAttribute('aria-pressed', String(state.preferences.narrowWeekend));
@@ -1719,27 +1964,50 @@ function applyPreferences() {
     hideWeekends: state.preferences.hideWeekends
   });
   state.calendar.setView(state.preferences.view);
+  state.suspendCalendarRangeLoading = false;
   window.requestAnimationFrame(() => state.calendar.render());
 }
 
-async function refreshData() {
-  [state.tasks, state.projects] = await Promise.all([listTasks(), listProjects()]);
-  const events = await listEvents();
+function decorateCalendarEvents(events) {
   const taskById = new Map(state.tasks.map((task) => [Number(task.id), task]));
   const projectById = new Map(state.projects.map((project) => [Number(project.id), project]));
-  const calendarEvents = events.map((event) => ({
+  return events.map((event) => ({
     ...event,
     source: event.source || taskById.get(Number(event.taskId))?.source,
     ...eventColorsForProject(
       projectById.get(Number(event.projectId ?? taskById.get(Number(event.taskId))?.projectId))
     )
   }));
+}
+
+async function refreshCalendarEvents() {
+  if (!state.calendar) return;
+  const requestId = ++state.calendarEventsRequestId;
+  const { start, end } = state.calendar.getRange();
+  const queryStart = addLocalDays(start, -CALENDAR_RANGE_MARGIN_DAYS);
+  const queryEnd = addLocalDays(end, CALENDAR_RANGE_MARGIN_DAYS);
+  const events = await listEventsInRange(queryStart, queryEnd);
+  if (requestId !== state.calendarEventsRequestId) return;
+  await state.calendar.replaceEvents(decorateCalendarEvents(events));
+}
+
+function handleCalendarRangeChange() {
+  formatRangeTitle();
+  if (!state.initialized || state.suspendCalendarRangeLoading) return;
+  refreshCalendarEvents().catch((error) => {
+    console.error(error);
+    notify('Não foi possível carregar este período.', 'error');
+  });
+}
+
+async function refreshData() {
+  [state.tasks, state.projects] = await Promise.all([listTasks(), listProjects()]);
   if (!state.tasks.some((task) => Number(task.id) === Number(state.selectedTaskId))) {
     state.selectedTaskId = state.tasks[0]?.id ?? null;
   }
   renderTasks();
   renderProjects();
-  await state.calendar.replaceEvents(calendarEvents);
+  await refreshCalendarEvents();
   formatRangeTitle();
 }
 
@@ -1917,6 +2185,10 @@ function setActiveScreen(screen) {
   } else if (settings) {
     elements.settingsScreen.scrollTop = 0;
     renderIntegrationConnections();
+    refreshDatabaseStats().catch((error) => {
+      console.error(error);
+      notify('Não foi possível calcular o uso de dados.', 'error');
+    });
   } else {
     clearReportOutput();
     window.requestAnimationFrame(() => state.calendar?.render());
@@ -1925,7 +2197,10 @@ function setActiveScreen(screen) {
 
 async function generateCurrentReport() {
   const mode = reportMode();
-  const events = await listEvents();
+  const rangeStart = dateFromInput(elements.reportStartDate.value);
+  const inclusiveEnd = dateFromInput(elements.reportEndDate.value);
+  if (!rangeStart || !inclusiveEnd) throw new Error('Escolha um período válido.');
+  const events = await listEventsInRange(rangeStart, addLocalDays(inclusiveEnd, 1));
   const rows = generateReport({
     events,
     tasks: state.tasks,
@@ -2296,6 +2571,56 @@ function wireEvents() {
     }
   });
 
+  elements.manageHistoryButton.addEventListener('click', openHistoryDialog);
+
+  document.querySelectorAll('[data-history-months]').forEach((button) => {
+    button.addEventListener('click', () => {
+      elements.historyCutoff.value = dateInputValue(monthsAgo(Number(button.dataset.historyMonths)));
+      updateHistoryPreview();
+    });
+  });
+
+  elements.historyCutoff.addEventListener('change', updateHistoryPreview);
+  elements.historyConfirmation.addEventListener('change', updateHistoryCleanupButton);
+
+  elements.historyExportButton.addEventListener('click', async () => {
+    try {
+      await exportBackup();
+      notify('Backup exportado.');
+    } catch (error) {
+      notify(error.message || 'Não foi possível exportar o backup.', 'error');
+    }
+  });
+
+  elements.confirmHistoryCleanup.addEventListener('click', async () => {
+    const cutoff = historyCutoffFromInput();
+    if (!cutoff || elements.confirmHistoryCleanup.disabled) return;
+
+    elements.confirmHistoryCleanup.disabled = true;
+    elements.confirmHistoryCleanup.setAttribute('aria-busy', 'true');
+    elements.confirmHistoryCleanup.textContent = 'Excluindo…';
+    try {
+      const deletedCount = await deleteHistoricalEvents(cutoff);
+      state.historyEligibleCount = 0;
+      closeDialog(elements.historyDialog);
+      clearReportOutput();
+      await Promise.all([refreshData(), refreshDatabaseStats()]);
+      notify(
+        `${new Intl.NumberFormat('pt-BR').format(deletedCount)} ${
+          deletedCount === 1 ? 'bloco excluído' : 'blocos excluídos'
+        }.`
+      );
+    } catch (error) {
+      elements.historyPreview.textContent =
+        error.message || 'Não foi possível excluir o histórico.';
+      elements.historyPreview.dataset.type = 'error';
+    } finally {
+      elements.confirmHistoryCleanup.removeAttribute('aria-busy');
+      elements.confirmHistoryCleanup.textContent = 'Excluir histórico';
+      updateHistoryCleanupButton();
+    }
+  });
+
   document.querySelector('#import-button').addEventListener('click', () => {
     elements.importFile.click();
   });
@@ -2336,6 +2661,7 @@ function wireEvents() {
         await loadPreferences();
         applyPreferences();
         await refreshData();
+        await refreshDatabaseStats();
         notify(
           `${result.taskCount} tarefas e ${result.eventCount} blocos importados.`
         );
@@ -2414,7 +2740,7 @@ async function init() {
       await deleteEvent(id);
       notify('Bloco removido.');
     },
-    onRangeChange: formatRangeTitle,
+    onRangeChange: handleCalendarRangeChange,
     async onViewChange(view) {
       state.preferences.view = view;
       elements.shell.dataset.view = view;
@@ -2433,6 +2759,7 @@ async function init() {
   renderFizzyConnection();
   renderTrelloConnection();
   await refreshData();
+  state.initialized = true;
 
   registerSW({
     onOfflineReady() {

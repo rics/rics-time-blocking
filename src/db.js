@@ -149,11 +149,25 @@ function normalizeColor(color) {
   return value.toUpperCase();
 }
 
-function belongsToTask(event, task) {
-  return (
-    Number(event.taskId) === Number(task.id) ||
-    (event.taskId == null && event.title === task.title)
+function validDate(value, message) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) throw new Error(message);
+  return date;
+}
+
+async function listEventsForTask(task) {
+  const [linkedEvents, legacyEvents] = await Promise.all([
+    db.events.where('taskId').equals(Number(task.id)).toArray(),
+    db.events
+      .where('title')
+      .equals(task.title)
+      .filter((event) => event.taskId == null)
+      .toArray()
+  ]);
+  const eventsById = new Map(
+    [...linkedEvents, ...legacyEvents].map((event) => [Number(event.id), event])
   );
+  return Array.from(eventsById.values());
 }
 
 export async function listTasks() {
@@ -246,9 +260,7 @@ export async function deleteTaskAndFutureEvents(task) {
   const now = Date.now();
 
   return db.transaction('rw', db.tasks, db.events, async () => {
-    const relatedEvents = await db.events
-      .filter((event) => belongsToTask(event, task))
-      .toArray();
+    const relatedEvents = await listEventsForTask(task);
     const futureEvents = relatedEvents.filter(
       (event) => new Date(event.start).getTime() > now
     );
@@ -272,6 +284,67 @@ export async function deleteTaskAndFutureEvents(task) {
 
 export async function listEvents() {
   return db.events.toArray();
+}
+
+export async function listEventsInRange(start, end) {
+  const rangeStart = validDate(start, 'O início do período é inválido.');
+  const rangeEnd = validDate(end, 'O fim do período é inválido.');
+  if (rangeEnd <= rangeStart) throw new Error('O período informado é inválido.');
+
+  const startTime = rangeStart.getTime();
+  const endTime = rangeEnd.getTime();
+  const startIso = rangeStart.toISOString();
+  const endIso = rangeEnd.toISOString();
+  const [startsBeforeEnd, endsAfterStart] = await Promise.all([
+    db.events.where('start').below(endIso).count(),
+    db.events.where('end').above(startIso).count()
+  ]);
+
+  if (startsBeforeEnd <= endsAfterStart) {
+    return db.events
+      .where('start')
+      .below(endIso)
+      .filter((event) => new Date(event.end).getTime() > startTime)
+      .toArray();
+  }
+
+  return db.events
+    .where('end')
+    .above(startIso)
+    .filter((event) => new Date(event.start).getTime() < endTime)
+    .toArray();
+}
+
+export async function getDatabaseStats() {
+  const [taskCount, eventCount, oldestEvent, newestEvent] = await Promise.all([
+    db.tasks.count(),
+    db.events.count(),
+    db.events.orderBy('start').first(),
+    db.events.orderBy('end').last()
+  ]);
+
+  return {
+    taskCount,
+    eventCount,
+    oldestEventStart: oldestEvent?.start ?? null,
+    newestEventEnd: newestEvent?.end ?? null
+  };
+}
+
+export async function countHistoricalEvents(cutoff) {
+  const cutoffDate = validDate(cutoff, 'Escolha uma data de corte válida.');
+  return db.events.where('end').below(cutoffDate.toISOString()).count();
+}
+
+export async function deleteHistoricalEvents(cutoff) {
+  const cutoffDate = validDate(cutoff, 'Escolha uma data de corte válida.');
+  const cutoffIso = cutoffDate.toISOString();
+
+  return db.transaction('rw', db.events, async () => {
+    const ids = await db.events.where('end').below(cutoffIso).primaryKeys();
+    await db.events.bulkDelete(ids);
+    return ids.length;
+  });
 }
 
 export async function listProjects() {
@@ -338,8 +411,8 @@ export async function deleteProject(id) {
     if (!project) throw new Error('O projeto selecionado não existe mais.');
 
     const [tasks, events] = await Promise.all([
-      db.tasks.filter((task) => Number(task.projectId) === projectId).toArray(),
-      db.events.filter((event) => Number(event.projectId) === projectId).toArray()
+      db.tasks.where('projectId').equals(projectId).toArray(),
+      db.events.where('projectId').equals(projectId).toArray()
     ]);
 
     await Promise.all([
@@ -363,9 +436,7 @@ export async function updateTaskProject(taskId, projectId) {
   }
 
   await db.tasks.update(id, { projectId: normalizedProjectId });
-  await db.events
-    .filter((event) => Number(event.taskId) === id)
-    .modify({ projectId: normalizedProjectId });
+  await db.events.where('taskId').equals(id).modify({ projectId: normalizedProjectId });
   return db.tasks.get(id);
 }
 
@@ -512,9 +583,10 @@ export async function syncExternalTasks(source, externalTasks) {
 
         if (titleChanged) {
           const futureEvents = await db.events
+            .where('taskId')
+            .equals(Number(current.id))
             .filter(
               (event) =>
-                Number(event.taskId) === Number(current.id) &&
                 new Date(event.start).getTime() > now
             )
             .toArray();
@@ -535,9 +607,7 @@ export async function syncExternalTasks(source, externalTasks) {
     const removedTasks = currentTasks.filter((task) => !seenKeys.has(task.externalKey));
 
     for (const task of removedTasks) {
-      const relatedEvents = await db.events
-        .filter((event) => belongsToTask(event, task))
-        .toArray();
+      const relatedEvents = await listEventsForTask(task);
       const futureEvents = relatedEvents.filter(
         (event) => new Date(event.start).getTime() > now
       );

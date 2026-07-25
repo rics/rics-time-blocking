@@ -689,6 +689,44 @@ button:active {
   margin-top: auto;
 }
 
+.storage-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.storage-stats > div {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+}
+
+.storage-stats .storage-usage-stat {
+  grid-column: 1 / -1;
+}
+
+.storage-stats dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.storage-stats dd {
+  overflow: hidden;
+  margin: 5px 0 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .settings-integrations-section {
   grid-row: span 2;
 }
@@ -1421,6 +1459,10 @@ button:active {
   width: min(440px, calc(100vw - 28px));
 }
 
+.history-dialog {
+  width: min(600px, calc(100vw - 28px));
+}
+
 .task-dialog {
   width: min(590px, calc(100vw - 28px));
 }
@@ -1607,6 +1649,67 @@ button:active {
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.history-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.history-presets .secondary-button {
+  min-height: 36px;
+  padding-inline: 11px;
+}
+
+.history-preview {
+  min-height: 42px;
+  margin-top: 14px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  color: var(--muted-strong);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.history-preview[data-type="warning"] {
+  border-color: #e4c7c3;
+  background: #fbefed;
+  color: #7f2f28;
+  font-weight: 650;
+}
+
+.history-preview[data-type="error"] {
+  color: var(--danger);
+}
+
+.history-warning {
+  margin-bottom: 14px;
+}
+
+.history-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--muted-strong);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.history-confirmation input {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+}
+
+.history-dialog-actions {
+  align-items: center;
 }
 
 .import-options {
@@ -2237,6 +2340,23 @@ button:active {
   .field-grid {
     grid-template-columns: 1fr;
     gap: 0;
+  }
+
+  .history-dialog-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .history-dialog-actions .dialog-action-spacer {
+    display: none;
+  }
+
+  .history-dialog-actions #history-export-button {
+    grid-column: 1 / -1;
+  }
+
+  .history-dialog-actions button {
+    width: 100%;
   }
 
   .app-dialog {
