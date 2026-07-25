@@ -31,6 +31,7 @@
 .ph.ph-eye-slash::before { content: "\e224"; }
 .ph.ph-dots-three-outline::before { content: "\e204"; }
 .ph.ph-download-simple::before { content: "\e20c"; }
+.ph.ph-file-pdf::before { content: "\e702"; }
 .ph.ph-upload-simple::before { content: "\e4c0"; }
 .ph.ph-calendar-plus::before { content: "\e714"; }
 .ph.ph-list-bullets::before { content: "\e2f2"; }

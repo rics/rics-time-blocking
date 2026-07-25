@@ -42,7 +42,8 @@ import {
   formatHours,
   generateReport,
   REPORT_UNASSIGNED_PROJECT,
-  reportCsv
+  reportCsv,
+  reportPdf
 } from './reports.js';
 
 const DEFAULT_BLOCK_DURATION_MINUTES = 30;
@@ -281,10 +282,16 @@ app.innerHTML = `
               <h2>Resultado</h2>
               <p id="report-results-summary">Defina os parâmetros para gerar um relatório.</p>
             </div>
-            <button class="secondary-button" id="report-export-button" type="button" disabled>
-              <i class="ph ph-download-simple" aria-hidden="true"></i>
-              Exportar CSV
-            </button>
+            <div class="report-export-actions">
+              <button class="secondary-button" id="report-export-button" type="button" disabled>
+                <i class="ph ph-download-simple" aria-hidden="true"></i>
+                Exportar CSV
+              </button>
+              <button class="secondary-button" id="report-export-pdf-button" type="button" disabled>
+                <i class="ph ph-file-pdf" aria-hidden="true"></i>
+                <span>Exportar PDF</span>
+              </button>
+            </div>
           </div>
           <div id="report-results-content" class="report-results-content">
             <div class="report-empty-state">
@@ -617,6 +624,7 @@ const elements = {
   reportResultsSummary: document.querySelector('#report-results-summary'),
   reportResultsContent: document.querySelector('#report-results-content'),
   reportExportButton: document.querySelector('#report-export-button'),
+  reportExportPdfButton: document.querySelector('#report-export-pdf-button'),
   rangeTitle: document.querySelector('#range-title'),
   viewSelect: document.querySelector('#view-select'),
   calendar: document.querySelector('#calendar'),
@@ -1622,6 +1630,7 @@ function setReportFormStatus(message = '', type = '') {
 function clearReportOutput() {
   state.report = { rows: [], mode: 'grouped', generated: false };
   elements.reportExportButton.disabled = true;
+  elements.reportExportPdfButton.disabled = true;
   elements.reportResultsSummary.textContent = 'Defina os parâmetros para gerar um relatório.';
   elements.reportResultsContent.replaceChildren();
   const empty = document.createElement('div');
@@ -1688,6 +1697,7 @@ function renderReportRows(rows, mode) {
     ? `${rows.length} ${rows.length === 1 ? 'linha' : 'linhas'} · ${formatHours(totalHours)}`
     : 'Nenhum bloco encontrado para os filtros escolhidos.';
   elements.reportExportButton.disabled = rows.length === 0;
+  elements.reportExportPdfButton.disabled = rows.length === 0;
 
   if (!rows.length) {
     const empty = document.createElement('div');
@@ -1781,18 +1791,48 @@ async function generateCurrentReport() {
   renderReportRows(rows, mode);
 }
 
-function exportCurrentReport() {
-  if (!state.report.generated || !state.report.rows.length) return;
-  const blob = new Blob([reportCsv(state.report)], { type: 'text/csv;charset=utf-8' });
+function reportFileName(extension) {
+  const type = state.report.mode === 'detailed' ? 'detalhado' : 'agrupado';
+  return `rics-time-blocking-relatorio-${type}-${state.report.startDate}-a-${state.report.endDate}.${extension}`;
+}
+
+function downloadReportFile(blob, extension) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  const type = state.report.mode === 'detailed' ? 'detalhado' : 'agrupado';
   link.href = url;
-  link.download = `rics-time-blocking-relatorio-${type}-${state.report.startDate}-a-${state.report.endDate}.csv`;
+  link.download = reportFileName(extension);
   document.body.append(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+function exportCurrentReportCsv() {
+  if (!state.report.generated || !state.report.rows.length) return;
+  const blob = new Blob([reportCsv(state.report)], { type: 'text/csv;charset=utf-8' });
+  downloadReportFile(blob, 'csv');
+}
+
+async function exportCurrentReportPdf() {
+  if (!state.report.generated || !state.report.rows.length) return;
+  const button = elements.reportExportPdfButton;
+  const label = button.querySelector('span');
+  button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
+  label.textContent = 'Gerando PDF…';
+
+  try {
+    const blob = await reportPdf(state.report);
+    downloadReportFile(blob, 'pdf');
+    notify('PDF exportado com sucesso.');
+  } catch (error) {
+    console.error(error);
+    notify('Não foi possível exportar o PDF.', 'error');
+  } finally {
+    button.removeAttribute('aria-busy');
+    button.disabled = !state.report.rows.length;
+    label.textContent = 'Exportar PDF';
+  }
 }
 
 function wireEvents() {
@@ -1822,7 +1862,8 @@ function wireEvents() {
       setReportFormStatus(error.message || 'Não foi possível gerar o relatório.', 'error');
     }
   });
-  elements.reportExportButton.addEventListener('click', exportCurrentReport);
+  elements.reportExportButton.addEventListener('click', exportCurrentReportCsv);
+  elements.reportExportPdfButton.addEventListener('click', exportCurrentReportPdf);
 
   document.querySelector('#previous-range').addEventListener('click', () => state.calendar.move(-1));
   document.querySelector('#next-range').addEventListener('click', () => state.calendar.move(1));

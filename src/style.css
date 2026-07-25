@@ -565,6 +565,13 @@ button:active {
   font-size: 12px;
 }
 
+.report-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .report-results-content {
   min-height: 0;
   overflow: auto;
@@ -2066,6 +2073,10 @@ button:active {
   .report-results-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .report-export-actions {
+    justify-content: flex-start;
   }
 
   .report-results-heading .secondary-button {

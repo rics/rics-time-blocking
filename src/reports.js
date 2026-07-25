@@ -115,6 +115,149 @@ export function formatHours(hours) {
   return `${wholeHours} h ${minutes} min`;
 }
 
+function formatHoursLong(hours) {
+  const totalMinutes = Math.round(hours * 60);
+  const wholeHours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const hoursLabel = `${wholeHours} ${wholeHours === 1 ? 'hora' : 'horas'}`;
+  const minutesLabel = `${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+
+  if (!minutes) return hoursLabel;
+  if (!wholeHours) return minutesLabel;
+  return `${hoursLabel} e ${minutesLabel}`;
+}
+
+function formatReportDate(value) {
+  return String(value).split('-').reverse().join('/');
+}
+
+function drawInlineText(doc, segments, x, y, fontSize) {
+  let cursor = x;
+  doc.setFontSize(fontSize);
+
+  for (const segment of segments) {
+    doc.setFont('helvetica', segment.bold ? 'bold' : 'normal');
+    doc.text(segment.text, cursor, y);
+    cursor += doc.getTextWidth(segment.text);
+  }
+}
+
+export async function reportPdf({ rows, mode, startDate, endDate }) {
+  const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable')
+  ]);
+  const doc = new jsPDF({ format: 'a4', orientation: 'portrait', unit: 'mm' });
+  const ink = [22, 35, 30];
+  const muted = [89, 103, 95];
+  const line = [223, 229, 225];
+  const surfaceSubtle = [251, 252, 251];
+  const margin = 18;
+  const totalHours = rows.reduce((total, row) => total + row.hours, 0);
+  const headings = mode === 'detailed'
+    ? ['Tarefa', 'Data', 'Início', 'Fim', 'Horas']
+    : ['Tarefa', 'Total de horas'];
+  const body = rows.map((row) =>
+    mode === 'detailed'
+      ? [row.taskTitle, formatReportDate(row.date), row.start, row.end, formatHours(row.hours)]
+      : [row.taskTitle, formatHours(row.hours)]
+  );
+  const subtitle = mode === 'detailed' ? 'Dados Detalhados' : 'Dados Consolidados';
+
+  doc.setProperties({
+    title: 'Relatório de Horas',
+    subject: `${subtitle} de ${formatReportDate(startDate)} a ${formatReportDate(endDate)}`,
+    author: 'Rics Time-blocking',
+    creator: 'Rics Time-blocking'
+  });
+  doc.setTextColor(...ink);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(20);
+  doc.text('Relatório de Horas', margin, 21);
+
+  drawInlineText(
+    doc,
+    [
+      { text: 'Período de ' },
+      { text: formatReportDate(startDate), bold: true },
+      { text: ' a ' },
+      { text: formatReportDate(endDate), bold: true }
+    ],
+    margin,
+    33,
+    13
+  );
+  drawInlineText(
+    doc,
+    [
+      { text: 'Total de horas: ' },
+      { text: formatHoursLong(totalHours), bold: true }
+    ],
+    margin,
+    42,
+    13
+  );
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text(subtitle, margin, 56);
+
+  autoTable(doc, {
+    startY: 62,
+    margin: { top: 18, right: margin, bottom: 22, left: margin },
+    head: [headings],
+    body,
+    theme: 'plain',
+    showHead: 'everyPage',
+    rowPageBreak: 'avoid',
+    styles: {
+      font: 'helvetica',
+      fontSize: 10,
+      textColor: muted,
+      cellPadding: { top: 3.2, right: 3, bottom: 3.2, left: 3 },
+      lineColor: line,
+      lineWidth: { bottom: 0.2 }
+    },
+    headStyles: {
+      fillColor: surfaceSubtle,
+      textColor: muted,
+      fontSize: 9,
+      fontStyle: 'bold',
+      cellPadding: { top: 3, right: 3, bottom: 3, left: 3 },
+      lineColor: line,
+      lineWidth: { bottom: 0.3 }
+    },
+    columnStyles: mode === 'detailed'
+      ? {
+          0: { cellWidth: 73, fontStyle: 'bold', textColor: ink },
+          1: { cellWidth: 26 },
+          2: { cellWidth: 20 },
+          3: { cellWidth: 20 },
+          4: { cellWidth: 32 }
+        }
+      : {
+          0: { cellWidth: 140, fontStyle: 'bold', textColor: ink },
+          1: { cellWidth: 34 }
+        }
+  });
+
+  const pageCount = doc.getNumberOfPages();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setDrawColor(...line);
+    doc.setLineWidth(0.2);
+    doc.line(margin, pageHeight - 14, pageWidth - margin, pageHeight - 14);
+    doc.setTextColor(...muted);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text(`Página ${page} de ${pageCount}`, pageWidth - margin, pageHeight - 9, { align: 'right' });
+  }
+
+  return doc.output('blob');
+}
+
 function csvEscape(value) {
   const string = String(value ?? '');
   return /[;"\r\n]/.test(string) ? `"${string.replaceAll('"', '""')}"` : string;
