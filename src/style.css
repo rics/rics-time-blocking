@@ -121,6 +121,30 @@ button:active {
   gap: 10px;
 }
 
+.header-donation-link {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: 9px;
+  transition:
+    transform 140ms ease,
+    background-color 140ms ease;
+}
+
+.header-donation-link:hover {
+  transform: translateY(-1px);
+  background: var(--accent-soft);
+}
+
+.header-donation-link img {
+  display: block;
+  width: 31px;
+  height: 31px;
+  object-fit: contain;
+}
+
 .global-nav-end {
   display: flex;
   align-self: stretch;
@@ -580,6 +604,35 @@ button:active {
   margin-top: auto;
 }
 
+.kofi-badge-link {
+  display: inline-flex;
+  width: max-content;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.kofi-badge-link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 9px 20px rgba(28, 55, 44, 0.12);
+}
+
+.kofi-badge-link img {
+  display: block;
+  width: 168px;
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.report-donation-link {
+  align-self: center;
+}
+
 .report-results {
   display: flex;
   min-width: 0;
@@ -686,6 +739,37 @@ button:active {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--surface);
+}
+
+.settings-support-section {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  gap: 28px;
+  border-color: #c8d9cf;
+  background: #f6faf7;
+}
+
+.settings-support-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.settings-support-copy h2 {
+  font-size: 19px;
+}
+
+.settings-support-copy p {
+  max-width: 650px;
+  margin: 6px 0 0;
+  color: var(--muted-strong);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.settings-donation-link {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .settings-section-heading {
@@ -2241,6 +2325,10 @@ button:active {
     grid-template-columns: 1fr;
   }
 
+  .settings-support-section {
+    grid-column: auto;
+  }
+
   .settings-integrations-section {
     grid-row: auto;
   }
@@ -2327,6 +2415,27 @@ button:active {
 @media (max-width: 650px) {
   .brand > span:last-child {
     display: none;
+  }
+
+  .header-donation-link {
+    width: 30px;
+    height: 30px;
+    flex-basis: 30px;
+  }
+
+  .header-donation-link img {
+    width: 28px;
+    height: 28px;
+  }
+
+  .settings-support-section {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 17px;
+  }
+
+  .settings-donation-link {
+    margin-left: 0;
   }
 
   .global-nav {

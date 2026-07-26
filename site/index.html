@@ -120,6 +120,13 @@
         backdrop-filter: blur(12px);
       }
 
+      .brand-group {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 9px;
+      }
+
       .brand {
         display: inline-flex;
         width: max-content;
@@ -130,6 +137,30 @@
         font-weight: 780;
         letter-spacing: -0.02em;
         text-decoration: none;
+      }
+
+      .donation-gif-link {
+        display: grid;
+        width: 36px;
+        height: 36px;
+        flex: 0 0 36px;
+        place-items: center;
+        border-radius: 10px;
+        transition:
+          transform 160ms ease,
+          background 160ms ease;
+      }
+
+      .donation-gif-link:hover {
+        transform: translateY(-2px);
+        background: var(--emerald-soft);
+      }
+
+      .donation-gif-link img {
+        display: block;
+        width: 33px;
+        height: 33px;
+        object-fit: contain;
       }
 
       .brand-mark {
@@ -1524,6 +1555,17 @@
           height: 27px;
         }
 
+        .donation-gif-link {
+          width: 31px;
+          height: 31px;
+          flex-basis: 31px;
+        }
+
+        .donation-gif-link img {
+          width: 29px;
+          height: 29px;
+        }
+
         .nav-cta {
           display: none;
         }
@@ -1712,10 +1754,22 @@
 
     <div class="language-view" id="pt" data-language="pt">
       <header class="site-nav">
-        <a class="brand" href="#pt-start" aria-label="Rics Time-blocking, início">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <span>Rics Time-blocking</span>
-        </a>
+        <div class="brand-group">
+          <a class="brand" href="#pt-start" aria-label="Rics Time-blocking, início">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span>Rics Time-blocking</span>
+          </a>
+          <a
+            class="donation-gif-link"
+            href="https://ko-fi.com/ricsilva"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Apoie o Rics Time-blocking no Ko-fi (abre em uma nova aba)"
+            title="Apoie o projeto no Ko-fi"
+          >
+            <img src="giphy.webp" alt="" aria-hidden="true" />
+          </a>
+        </div>
         <nav class="main-links" aria-label="Navegação principal">
           <a href="#pt-benefits">Por que usar</a>
           <a href="#pt-flow">Como funciona</a>
@@ -2063,10 +2117,22 @@
 
     <div class="language-view" id="en" data-language="en" hidden>
       <header class="site-nav">
-        <a class="brand" href="#en-start" aria-label="Rics Time-blocking, home">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <span>Rics Time-blocking</span>
-        </a>
+        <div class="brand-group">
+          <a class="brand" href="#en-start" aria-label="Rics Time-blocking, home">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span>Rics Time-blocking</span>
+          </a>
+          <a
+            class="donation-gif-link"
+            href="https://ko-fi.com/ricsilva"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Support Rics Time-blocking on Ko-fi (opens in a new tab)"
+            title="Support the project on Ko-fi"
+          >
+            <img src="giphy.webp" alt="" aria-hidden="true" />
+          </a>
+        </div>
         <nav class="main-links" aria-label="Main navigation">
           <a href="#en-benefits">Why use it</a>
           <a href="#en-flow">How it works</a>

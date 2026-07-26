@@ -108,17 +108,50 @@
         color: #f0f7f3;
       }
 
-      .brand {
+      .brand-row {
         display: flex;
         align-items: center;
-        gap: 11px;
-        padding: 2px 7px 22px;
+        gap: 8px;
+        padding-bottom: 22px;
         border-bottom: 1px solid rgba(255, 255, 255, 0.11);
+      }
+
+      .brand {
+        display: flex;
+        min-width: 0;
+        flex: 1 1 auto;
+        align-items: center;
+        gap: 11px;
+        padding: 2px 7px;
         color: inherit;
         font-size: 15px;
         font-weight: 760;
         letter-spacing: -0.01em;
         text-decoration: none;
+      }
+
+      .donation-gif-link {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        flex: 0 0 34px;
+        place-items: center;
+        border-radius: 9px;
+        transition:
+          transform 160ms ease,
+          background 160ms ease;
+      }
+
+      .donation-gif-link:hover {
+        transform: translateY(-2px);
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .donation-gif-link img {
+        display: block;
+        width: 31px;
+        height: 31px;
+        object-fit: contain;
       }
 
       .brand-mark {
@@ -1225,16 +1258,32 @@
           gap: 10px;
         }
 
-        .brand {
+        .brand-row {
           min-width: max-content;
           padding: 0;
           border: 0;
+        }
+
+        .brand {
+          min-width: max-content;
+          padding: 0;
           font-size: 12px;
         }
 
         .brand-mark {
           width: 25px;
           height: 25px;
+        }
+
+        .donation-gif-link {
+          width: 29px;
+          height: 29px;
+          flex-basis: 29px;
+        }
+
+        .donation-gif-link img {
+          width: 27px;
+          height: 27px;
         }
 
         .language-switch {
@@ -1444,10 +1493,22 @@
     <div class="manual-view" id="pt" data-language="pt">
       <div class="shell" id="pt-top">
         <aside class="side" aria-label="Navegação do manual">
-          <a class="brand" href="./#pt" aria-label="Voltar para a página inicial">
-            <span class="brand-mark" aria-hidden="true"></span>
-            <span>Rics Time-blocking</span>
-          </a>
+          <div class="brand-row">
+            <a class="brand" href="./#pt" aria-label="Voltar para a página inicial">
+              <span class="brand-mark" aria-hidden="true"></span>
+              <span>Rics Time-blocking</span>
+            </a>
+            <a
+              class="donation-gif-link"
+              href="https://ko-fi.com/ricsilva"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Apoie o Rics Time-blocking no Ko-fi (abre em uma nova aba)"
+              title="Apoie o projeto no Ko-fi"
+            >
+              <img src="giphy.webp" alt="" aria-hidden="true" />
+            </a>
+          </div>
           <div class="language-switch" aria-label="Idioma">
             <a href="#pt" lang="pt-BR" aria-current="page">PT</a>
             <a href="#en" lang="en">EN</a>
@@ -2278,10 +2339,22 @@
     <div class="manual-view" id="en" data-language="en" hidden>
       <div class="shell" id="en-top">
         <aside class="side" aria-label="Manual navigation">
-          <a class="brand" href="./#en" aria-label="Back to the home page">
-            <span class="brand-mark" aria-hidden="true"></span>
-            <span>Rics Time-blocking</span>
-          </a>
+          <div class="brand-row">
+            <a class="brand" href="./#en" aria-label="Back to the home page">
+              <span class="brand-mark" aria-hidden="true"></span>
+              <span>Rics Time-blocking</span>
+            </a>
+            <a
+              class="donation-gif-link"
+              href="https://ko-fi.com/ricsilva"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Support Rics Time-blocking on Ko-fi (opens in a new tab)"
+              title="Support the project on Ko-fi"
+            >
+              <img src="giphy.webp" alt="" aria-hidden="true" />
+            </a>
+          </div>
           <div class="language-switch" aria-label="Language">
             <a href="#pt" lang="pt-BR">PT</a>
             <a href="#en" lang="en" aria-current="page">EN</a>

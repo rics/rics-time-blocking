@@ -38,7 +38,13 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
-      includeAssets: ['app-icon.svg', 'fizzy.png', 'trello.svg'],
+      includeAssets: [
+        'app-icon.svg',
+        'fizzy.png',
+        'trello.svg',
+        'giphy.webp',
+        'support_me_on_kofi_badge_beige.webp'
+      ],
       manifest: {
         name: 'Rics Time-blocking',
         short_name: 'Rics Time-blocking',
@@ -60,7 +66,7 @@ export default defineConfig({
       },
       workbox: {
         navigateFallback: '/index.html',
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2}']
+        globPatterns: ['**/*.{js,css,html,svg,png,webp,woff2}']
       }
     })
   ]

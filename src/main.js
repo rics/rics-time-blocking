@@ -86,6 +86,16 @@ app.innerHTML = `
           <span class="brand-mark" aria-hidden="true"><span></span></span>
           <span>Rics Time-blocking</span>
         </div>
+        <a
+          class="header-donation-link"
+          href="https://ko-fi.com/ricsilva"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Apoie o Rics Time-blocking no Ko-fi (abre em uma nova aba)"
+          title="Apoie o Rics Time-blocking no Ko-fi"
+        >
+          <img src="/giphy.webp" alt="" aria-hidden="true" />
+        </a>
       </div>
 
       <nav class="app-navigation" aria-label="Navegação principal">
@@ -273,6 +283,15 @@ app.innerHTML = `
 
           <p id="report-form-status" class="report-form-status" role="status"></p>
           <button class="primary-button report-generate-button" id="report-generate-button" type="submit" disabled>Gerar relatório</button>
+          <a
+            class="kofi-badge-link report-donation-link"
+            href="https://ko-fi.com/ricsilva"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Apoie o Rics Time-blocking no Ko-fi (abre em uma nova aba)"
+          >
+            <img src="/support_me_on_kofi_badge_beige.webp" alt="" aria-hidden="true" />
+          </a>
         </form>
 
         <section class="report-results" aria-live="polite">
@@ -313,6 +332,22 @@ app.innerHTML = `
       </header>
 
       <div class="settings-layout">
+        <section class="settings-section settings-support-section">
+          <div class="settings-support-copy">
+            <h2>Curtiu? Fortalece o projeto.</h2>
+            <p>Se o Rics já salvou seu dia de algum jeito, considere bancar um cafezinho pra manter o projeto vivo — sem pressão. ☕</p>
+          </div>
+          <a
+            class="kofi-badge-link settings-donation-link"
+            href="https://ko-fi.com/ricsilva"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Apoie o Rics Time-blocking no Ko-fi (abre em uma nova aba)"
+          >
+            <img src="/support_me_on_kofi_badge_beige.webp" alt="" aria-hidden="true" />
+          </a>
+        </section>
+
         <section class="settings-section settings-storage-section">
           <div class="settings-section-heading">
             <span class="settings-section-icon" aria-hidden="true">
